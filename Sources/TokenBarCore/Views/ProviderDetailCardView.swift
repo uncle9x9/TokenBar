@@ -145,18 +145,20 @@ public struct ProviderDetailCardView: View {
                     .monospacedDigit()
             }
 
-            // Line 3: Thin progress bar filling left-to-right (0% -> 100% consumed)
+            // Line 3: Progress bar filling left-to-right (0% -> 100% consumed)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color(nsColor: .separatorColor).opacity(0.4))
+                    Capsule(style: .continuous)
+                        .fill(Color.primary.opacity(0.14))
 
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(barColor(for: window.usedPercent))
-                        .frame(width: geo.size.width * CGFloat(window.usedPercent / 100.0))
+                    if window.usedPercent > 0 {
+                        Capsule(style: .continuous)
+                            .fill(barColor(for: window.usedPercent))
+                            .frame(width: min(geo.size.width, max(6.0, geo.size.width * CGFloat(window.usedPercent / 100.0))))
+                    }
                 }
             }
-            .frame(height: 4)
+            .frame(height: 6)
             .padding(.top, 2)
         }
     }
@@ -165,11 +167,11 @@ public struct ProviderDetailCardView: View {
         // Clean understated palette matching Claude Code
         switch percent {
         case ..<50:
-            return Color.accentColor.opacity(0.85)
+            return Color.accentColor
         case 50..<80:
-            return Color.orange.opacity(0.9)
+            return Color.orange
         default:
-            return Color.red.opacity(0.9)
+            return Color.red
         }
     }
 }

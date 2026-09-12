@@ -29,10 +29,11 @@ public struct ConsolidatedQuotaPanelView: View {
         // Fixed chrome heights:
         // Header: top 10 + text ~15 + bottom 8 = 33pt
         // Top divider: 1pt
-        // Scroll content vertical padding: top 10 + bottom 10 = 20pt
+        // Scroll content vertical padding: top 12 + bottom 14 = 26pt
         // Bottom divider: 1pt
-        // Footer: top 8 + buttons ~15 + bottom 8 = 31pt
-        let fixedChromeHeight: CGFloat = 86.0
+        // Footer: top 8 + buttons ~16 + bottom 8 = 32pt
+        // Extra bottom breathing clearance: 12pt
+        let fixedChromeHeight: CGFloat = 105.0
 
         if configs.isEmpty {
             let emptyStateHeight: CGFloat = 110.0
@@ -51,16 +52,16 @@ public struct ConsolidatedQuotaPanelView: View {
             var sectionHeight: CGFloat = 18.0
 
             if !windows.isEmpty {
-                // 4pt spacing between identity row and quota windows
-                sectionHeight += 4.0
-                // Each quota window row: title/percent/reset (15pt) + 2pt spacing + 3.5pt bar + 1pt top padding = 21.5pt
-                let windowsHeight = CGFloat(windows.count) * 21.5
-                // 5pt spacing between multiple windows within the same provider
-                let windowsSpacing = CGFloat(max(0, windows.count - 1)) * 5.0
+                // 5pt spacing between identity row and quota windows
+                sectionHeight += 5.0
+                // Each quota window row: title/percent/reset (15pt) + 3pt spacing + 6pt bar + 1pt top padding = 25pt
+                let windowsHeight = CGFloat(windows.count) * 25.0
+                // 6pt spacing between multiple windows within the same provider
+                let windowsSpacing = CGFloat(max(0, windows.count - 1)) * 6.0
                 sectionHeight += windowsHeight + windowsSpacing
             } else if usage.balance == nil && usage.error == nil {
                 // "Waiting for usage data…" placeholder
-                sectionHeight += 4.0 + 15.0
+                sectionHeight += 5.0 + 15.0
             }
 
             // Vertical padding for provider section (1pt top + 1pt bottom)
@@ -68,8 +69,8 @@ public struct ConsolidatedQuotaPanelView: View {
             totalProvidersHeight += sectionHeight
         }
 
-        // 10pt spacing between provider sections
-        let interProviderSpacing = CGFloat(max(0, configs.count - 1)) * 10.0
+        // 12pt spacing between provider sections
+        let interProviderSpacing = CGFloat(max(0, configs.count - 1)) * 12.0
         let rawContentHeight = totalProvidersHeight + interProviderSpacing + fixedChromeHeight
 
         let targetHeight = min(rawContentHeight, maxAvailableHeight)
@@ -97,9 +98,9 @@ public struct ConsolidatedQuotaPanelView: View {
             Divider()
                 .opacity(0.6)
 
-            // Providers Area (Auto-sized: scroll only when genuinely exceeds screen height)
+            // Providers Area (Auto-sized: natural scrolling without lock)
             ScrollView(.vertical, showsIndicators: sizing.needsScroll) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     let configs = store.enabledConfigs
                     if configs.isEmpty {
                         emptyStateView
@@ -110,9 +111,9 @@ public struct ConsolidatedQuotaPanelView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.top, 12)
+                .padding(.bottom, 14)
             }
-            .scrollDisabled(!sizing.needsScroll)
 
             Divider()
                 .opacity(0.6)
@@ -235,13 +236,13 @@ public struct ConsolidatedQuotaPanelView: View {
 
     // MARK: - Quota Window Row (Claude Code Model)
     private func quotaWindowRow(_ window: QuotaWindowItem) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
                 // Window Title
                 Text(window.title)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: 70, alignment: .leading)
+                    .frame(minWidth: 105, alignment: .leading)
 
                 // Consumed percentage
                 Text("\(Int(window.usedPercent))% used")
@@ -259,18 +260,21 @@ public struct ConsolidatedQuotaPanelView: View {
                 }
             }
 
-            // Thin progress bar: grows 0% -> 100% as consumed
+            // Quota progress bar: grows 0% -> 100% as consumed (Claude Code model)
+            // Full track is always clearly visible even at 0%
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color(nsColor: .separatorColor).opacity(0.35))
+                    Capsule(style: .continuous)
+                        .fill(Color.primary.opacity(0.14))
 
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(barColor(for: window.usedPercent))
-                        .frame(width: geo.size.width * CGFloat(window.usedPercent / 100.0))
+                    if window.usedPercent > 0 {
+                        Capsule(style: .continuous)
+                            .fill(barColor(for: window.usedPercent))
+                            .frame(width: min(geo.size.width, max(6.0, geo.size.width * CGFloat(window.usedPercent / 100.0))))
+                    }
                 }
             }
-            .frame(height: 3.5)
+            .frame(height: 6)
             .padding(.top, 1)
         }
     }
@@ -279,11 +283,11 @@ public struct ConsolidatedQuotaPanelView: View {
         // Understated, factual colors matching Claude Code
         switch percent {
         case ..<50:
-            return Color.accentColor.opacity(0.85)
+            return Color.accentColor
         case 50..<80:
-            return Color.orange.opacity(0.9)
+            return Color.orange
         default:
-            return Color.red.opacity(0.9)
+            return Color.red
         }
     }
 
@@ -300,6 +304,7 @@ public struct ConsolidatedQuotaPanelView: View {
                 .font(.system(size: 11, weight: .medium))
             }
             .buttonStyle(.plain)
+            .focusable(false)
             .disabled(store.isRefreshing)
 
             Spacer()
@@ -314,6 +319,7 @@ public struct ConsolidatedQuotaPanelView: View {
                 .font(.system(size: 11))
             }
             .buttonStyle(.plain)
+            .focusable(false)
 
             Text("•")
                 .font(.system(size: 9))
@@ -324,6 +330,7 @@ public struct ConsolidatedQuotaPanelView: View {
             }
             .font(.system(size: 11))
             .buttonStyle(.plain)
+            .focusable(false)
             .foregroundStyle(.secondary)
         }
         .foregroundStyle(.secondary)
