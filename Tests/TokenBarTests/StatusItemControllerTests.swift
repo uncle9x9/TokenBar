@@ -182,4 +182,49 @@ final class StatusItemControllerTests: XCTestCase {
             XCTAssertNil(btnTracking.hitTest(NSPoint(x: 10, y: 10)), "HoverTrackingView MUST return nil from hitTest so clicks reach NSStatusBarButton")
         }
     }
+
+    func testHybridPresentationModeAndOverflowBadge() {
+        let store = UsageStore.shared
+        store.seedSampleData()
+        let controller = StatusItemController.shared
+        controller.setup()
+
+        store.presentation = .hybrid
+        store.maxVisibleInMenuBar = 3
+        store.enabledProviderIDs = ["claude", "codex", "antigravity", "gemini"]
+
+        XCTAssertEqual(store.effectivePresentation, .hybrid)
+        XCTAssertEqual(store.enabledConfigs.count, 4)
+        XCTAssertEqual(store.maxVisibleInMenuBar, 3)
+
+        controller.updateDisplay()
+
+        let mirror = Mirror(reflecting: controller)
+        let statusItem = mirror.children.first(where: { $0.label == "statusItem" })?.value as? NSStatusItem
+        guard let button = statusItem?.button else {
+            XCTFail("StatusItem button missing")
+            return
+        }
+
+        XCTAssertNotNil(button.image, "Button must have combined rendered image for hybrid mode")
+        XCTAssertGreaterThan(button.image?.size.width ?? 0, 50, "Combined image must span multiple providers and overflow badge")
+
+        // Renderer verification: 3 providers + 1 overflow
+        let visibleConfigs = Array(store.enabledConfigs.prefix(3))
+        let providerDataList = visibleConfigs.map { config -> StatusItemRenderer.ProviderData in
+            let usage = store.usage(for: config.id)
+            return StatusItemRenderer.ProviderData(
+                providerID: config.id,
+                displayType: config.displayType,
+                balance: usage.balance,
+                showBalance: true,
+                rateWindows: []
+            )
+        }
+
+        let imageWithOverflow = StatusItemRenderer.renderCombined(providers: providerDataList, overflowCount: 1)
+        let imageWithoutOverflow = StatusItemRenderer.renderCombined(providers: providerDataList, overflowCount: 0)
+
+        XCTAssertGreaterThan(imageWithOverflow.size.width, imageWithoutOverflow.size.width, "Overflow badge +1 must add width to status item image")
+    }
 }

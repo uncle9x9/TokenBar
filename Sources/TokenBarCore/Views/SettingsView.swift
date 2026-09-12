@@ -218,6 +218,7 @@ public struct GeneralSettingsView: View {
     @AppStorage("batterySaverEnabled") private var batterySaverEnabled = false
     @AppStorage("menuBarPresentation") private var menuBarPresentation: String = MenuBarPresentation.automatic.rawValue
     @AppStorage("autoConsolidateThreshold") private var autoConsolidateThreshold: Int = 4
+    @AppStorage("maxVisibleInMenuBar") private var maxVisibleInMenuBar: Int = 3
 
     public var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
@@ -268,7 +269,8 @@ public struct GeneralSettingsView: View {
                 SettingsSection(title: "Menu Bar Presentation") {
                     VStack(alignment: .leading, spacing: 8) {
                         Picker("Presentation Mode", selection: $menuBarPresentation) {
-                            Text("Automatic (1–3 Horizontal, 4+ Consolidated)").tag(MenuBarPresentation.automatic.rawValue)
+                            Text("Hybrid / Overflow (Keep 1–3 in Menu Bar, Hover for All)").tag(MenuBarPresentation.hybrid.rawValue)
+                            Text("Automatic (1–3 Horizontal, 4+ Single Icon)").tag(MenuBarPresentation.automatic.rawValue)
                             Text("Horizontal / Original (Classic CodexBarMenuBar)").tag(MenuBarPresentation.horizontal.rawValue)
                             Text("Vertical / Single Icon").tag(MenuBarPresentation.vertical.rawValue)
                         }
@@ -278,6 +280,22 @@ public struct GeneralSettingsView: View {
                                 store.presentation = p
                                 StatusItemController.shared.rebuildMenu()
                             }
+                        }
+
+                        if menuBarPresentation == MenuBarPresentation.hybrid.rawValue {
+                            HStack(spacing: 8) {
+                                Text("Maximum visible providers in menu bar:")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Stepper("\(maxVisibleInMenuBar)", value: $maxVisibleInMenuBar, in: 1...6)
+                                    .controlSize(.small)
+                                    .onChange(of: maxVisibleInMenuBar) { _, val in
+                                        store.maxVisibleInMenuBar = val
+                                        StatusItemController.shared.rebuildMenu()
+                                    }
+                            }
+                            .padding(.leading, 20)
+                            .padding(.top, 2)
                         }
 
                         if menuBarPresentation == MenuBarPresentation.automatic.rawValue {
@@ -296,11 +314,57 @@ public struct GeneralSettingsView: View {
                             .padding(.top, 2)
                         }
 
-                        Text("Consolidated vertical mode keeps a single compact icon in the menu bar to prevent crowding around the MacBook Pro display notch.")
-                            .font(.footnote)
-                            .foregroundStyle(.tertiary)
+                        Group {
+                            if menuBarPresentation == MenuBarPresentation.hybrid.rawValue {
+                                Text("Shows the primary providers directly in the menu bar for 0-click glanceability. Additional providers overflow (+N); hovering reveals all providers in the consolidated panel.")
+                            } else if menuBarPresentation == MenuBarPresentation.automatic.rawValue {
+                                Text("Switches automatically between horizontal items and a single compact icon based on provider count.")
+                            } else if menuBarPresentation == MenuBarPresentation.horizontal.rawValue {
+                                Text("Displays all enabled providers horizontally in the menu bar (classic CodexBarMenuBar layout).")
+                            } else {
+                                Text("Consolidated vertical mode keeps a single compact icon in the menu bar to prevent crowding around the MacBook Pro display notch.")
+                            }
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
                     }
                 }
+
+                Divider()
+
+                SettingsSection(title: "Quota Clock") {
+                    Picker("Provider", selection: Binding(
+                        get: { store.enabledConfigs.contains { $0.id == store.orbitProviderID } ? store.orbitProviderID : "" },
+                        set: { store.orbitProviderID = $0 }
+                    )) {
+                        Text("First enabled provider").tag("")
+                        ForEach(store.enabledConfigs) { config in
+                            Text(config.id == "claude" ? "Claude Code / Anthropic" : config.displayName)
+                                .tag(config.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Picker("Quota window", selection: $store.orbitWindowID) {
+                        Text("Session").tag("session")
+                        Text("Weekly").tag("weekly")
+                    }
+                    .pickerStyle(.segmented)
+
+                    PreferenceToggleRow(
+                        "Show quota clock beside provider details",
+                        subtitle: "The quota clock is always shown in single-icon mode.",
+                        isOn: $store.orbitIconEnabled
+                    )
+
+                    Text("The outer ring counts down to reset in 60 steps. The center bar fills from left to right as quota is used, turning red when full.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .onChange(of: store.orbitProviderID) { _, _ in StatusItemController.shared.rebuildMenu() }
+                .onChange(of: store.orbitWindowID) { _, _ in StatusItemController.shared.rebuildMenu() }
+                .onChange(of: store.orbitIconEnabled) { _, _ in StatusItemController.shared.rebuildMenu() }
 
                 Divider()
 

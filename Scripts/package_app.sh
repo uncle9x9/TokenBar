@@ -25,6 +25,9 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$RELEASE_BIN" "$MACOS_DIR/TokenBar"
 chmod +x "$MACOS_DIR/TokenBar"
 
+# Finder, Dock, and application switcher icon.
+cp "$ROOT_DIR/Resources/AppIcon/TokenBar.icns" "$RESOURCES_DIR/TokenBar.icns"
+
 # Copy SVG icons
 cp "$ROOT_DIR/Sources/TokenBarCore/Resources/ProviderIcons/"*.svg "$RESOURCES_DIR/"
 
@@ -45,6 +48,8 @@ cat > "$CONTENTS_DIR/Info.plist" << 'PLIST_EOF'
     <key>CFBundleName</key>
     <string>TokenBar</string>
     <key>CFBundleDisplayName</key>
+    <string>TokenBar</string>
+    <key>CFBundleIconFile</key>
     <string>TokenBar</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>

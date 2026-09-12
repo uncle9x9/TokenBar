@@ -49,7 +49,7 @@ public enum StatusItemRenderer {
         }
     }
 
-    public static func renderCombined(providers: [ProviderData]) -> NSImage {
+    public static func renderCombined(providers: [ProviderData], overflowCount: Int = 0) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         let defaultAttrs: [NSAttributedString.Key: Any] = [
             .font: font,
@@ -144,6 +144,14 @@ public enum StatusItemRenderer {
                     segments.append(.init(.text(text, NSColor.labelColor), textWidth(text)))
                 }
             }
+        }
+
+        if overflowCount > 0 {
+            segments.append(.init(.spacer, dividerPad))
+            segments.append(.init(.divider, 1))
+            segments.append(.init(.spacer, dividerPad))
+            let overflowStr = "+\(overflowCount)"
+            segments.append(.init(.text(overflowStr, NSColor.secondaryLabelColor), textWidth(overflowStr)))
         }
 
         segments.append(.init(.spacer, 4))

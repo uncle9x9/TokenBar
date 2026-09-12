@@ -8,13 +8,15 @@ public enum DisplayType: String, Codable, Sendable {
 public typealias DisplayMetricType = DisplayType
 
 public enum MenuBarPresentation: String, Codable, CaseIterable, Sendable {
+    case hybrid = "hybrid"
     case automatic = "automatic"
     case horizontal = "horizontal"
     case vertical = "vertical"
 
     public var title: String {
         switch self {
-        case .automatic: return "Automatic (1–3 Horizontal, 4+ Consolidated)"
+        case .hybrid: return "Hybrid / Overflow (Keep 1–3 in Menu Bar, Hover for All)"
+        case .automatic: return "Automatic (1–3 Horizontal, 4+ Single Icon)"
         case .horizontal: return "Horizontal / Original (Classic CodexBarMenuBar)"
         case .vertical: return "Vertical / Single Icon"
         }

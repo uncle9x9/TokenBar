@@ -32,6 +32,12 @@ public final class UsageStore {
         }
     }
 
+    public var maxVisibleInMenuBar: Int = 3 {
+        didSet {
+            UserDefaults.standard.set(maxVisibleInMenuBar, forKey: "maxVisibleInMenuBar")
+        }
+    }
+
     public var autoConsolidateThreshold: Int = 4 {
         didSet {
             UserDefaults.standard.set(autoConsolidateThreshold, forKey: "autoConsolidateThreshold")
@@ -52,6 +58,23 @@ public final class UsageStore {
     }
 
     public var isRefreshing: Bool = false
+    public var orbitProviderID: String = "" {
+        didSet { UserDefaults.standard.set(orbitProviderID, forKey: "orbitProviderID") }
+    }
+
+    public var orbitWindowID: String = "session" {
+        didSet { UserDefaults.standard.set(orbitWindowID, forKey: "orbitWindowID") }
+    }
+
+    public var orbitIconEnabled: Bool = true {
+        didSet { UserDefaults.standard.set(orbitIconEnabled, forKey: "orbitIconEnabled") }
+    }
+
+    /// An unavailable selection follows provider order, never usage retrieval success.
+    public var orbitConfig: ProviderConfig? {
+        enabledConfigs.first { $0.id == orbitProviderID } ?? enabledConfigs.first
+    }
+
     public var lastRefreshTime: Date?
     public var lastError: String?
     public var lastMigrationResult: MigrationResult?
@@ -75,9 +98,11 @@ public final class UsageStore {
         }
     }
 
-    /// Resolves the effective menu bar presentation (Horizontal vs Vertical).
+    /// Resolves the effective menu bar presentation (Horizontal vs Vertical vs Hybrid).
     public var effectivePresentation: MenuBarPresentation {
         switch presentation {
+        case .hybrid:
+            return .hybrid
         case .horizontal:
             return .horizontal
         case .vertical:
@@ -139,6 +164,11 @@ public final class UsageStore {
 
         self.resetTimeAsAbsolute = UserDefaults.standard.bool(forKey: "resetTimeAsAbsolute")
 
+        self.orbitProviderID = UserDefaults.standard.string(forKey: "orbitProviderID") ?? ""
+        let savedOrbitWindow = UserDefaults.standard.string(forKey: "orbitWindowID")
+        self.orbitWindowID = savedOrbitWindow == "weekly" ? "weekly" : "session"
+        self.orbitIconEnabled = UserDefaults.standard.object(forKey: "orbitIconEnabled") as? Bool ?? true
+
         if let savedPresentationStr = UserDefaults.standard.string(forKey: "menuBarPresentation"),
            let p = MenuBarPresentation(rawValue: savedPresentationStr) {
             self.presentation = p
@@ -151,6 +181,13 @@ public final class UsageStore {
             self.autoConsolidateThreshold = savedThreshold
         } else {
             self.autoConsolidateThreshold = 4
+        }
+
+        let savedMaxVisible = UserDefaults.standard.integer(forKey: "maxVisibleInMenuBar")
+        if savedMaxVisible > 0 {
+            self.maxVisibleInMenuBar = savedMaxVisible
+        } else {
+            self.maxVisibleInMenuBar = 3
         }
 
         loadDisplaySettings()

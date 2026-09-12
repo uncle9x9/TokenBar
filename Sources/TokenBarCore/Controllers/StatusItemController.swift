@@ -63,6 +63,7 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
     private let store = UsageStore.shared
     private var settingsWindowController: NSWindowController?
     private var observationTask: Task<Void, Never>?
+    private var appearanceObservation: NSKeyValueObservation?
 
     // Hover & dismissal hysteresis tracking
     private var hoverTimer: Timer?
@@ -81,6 +82,9 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem.button {
+            appearanceObservation = button.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+                Task { @MainActor in self?.updateDisplay() }
+            }
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -148,23 +152,31 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     private func startObserving() {
+        observationTask?.cancel()
         observationTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
                 self?.updateDisplay()
             }
         }
     }
 
     public func updateDisplay() {
-        guard let button = statusItem.button else { return }
+        guard let button = statusItem?.button else { return }
 
         let presentation = store.effectivePresentation
         let configs = store.enabledConfigs
+        let now = Date()
+        let config = store.orbitConfig
+        let state = QuotaClockState(usage: config.map { store.usage(for: $0.id) }, windowID: store.orbitWindowID, now: now)
+        let dark = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let clock = QuotaClockIcon.render(state: state, dark: dark)
+        let clockDescription = state.description(provider: config?.displayName ?? "TokenBar",
+                                                 window: store.orbitWindowID == "weekly" ? "Weekly" : "Session", now: now)
 
         if configs.isEmpty {
-            button.image = nil
-            button.title = "TokenBar"
+            button.image = clock
+            button.title = ""
             button.toolTip = "No providers enabled"
             return
         }
@@ -172,64 +184,34 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         switch presentation {
         case .horizontal:
             // Upstream horizontal combined presentation (Level 0 glanceability)
-            let providerDataList = configs.map { config -> StatusItemRenderer.ProviderData in
-                let usage = store.usage(for: config.id)
-                let ds = store.displaySetting(for: config.id)
-
-                var rateWindows: [StatusItemRenderer.RateWindowData] = []
-                if let s = usage.sessionPercent {
-                    rateWindows.append(.init(
-                        key: "session",
-                        menuBarPrefix: nil,
-                        usedPercent: s,
-                        resetsAt: usage.sessionResetsAt,
-                        windowMinutes: usage.sessionWindowMinutes,
-                        settings: ds.settings(for: "session")
-                    ))
-                }
-                if let w = usage.weeklyPercent {
-                    rateWindows.append(.init(
-                        key: "weekly",
-                        menuBarPrefix: " W:",
-                        usedPercent: w,
-                        resetsAt: usage.weeklyResetsAt,
-                        windowMinutes: usage.weeklyWindowMinutes,
-                        settings: ds.settings(for: "weekly")
-                    ))
-                }
-                for extra in usage.extraWindows {
-                    let prefix = " \(extra.title.prefix(1)):"
-                    rateWindows.append(.init(
-                        key: extra.id,
-                        menuBarPrefix: prefix,
-                        usedPercent: extra.usedPercent,
-                        resetsAt: extra.resetsAt,
-                        windowMinutes: extra.windowMinutes,
-                        settings: ds.settings(for: extra.id)
-                    ))
-                }
-
-                return StatusItemRenderer.ProviderData(
-                    providerID: config.id,
-                    displayType: config.displayType,
-                    balance: usage.balance,
-                    showBalance: ds.showBalance,
-                    rateWindows: rateWindows
-                )
-            }
-
+            let providerDataList = configs.map { buildProviderData(for: $0) }
             button.title = ""
-            button.image = StatusItemRenderer.renderCombined(providers: providerDataList)
+            button.image = StatusItemRenderer.renderCombined(providers: providerDataList, overflowCount: 0)
+            button.toolTip = buildTooltip()
+
+        case .hybrid:
+            // Hybrid / Overflow: keep top N in menu bar, reveal all on hover
+            let maxVisible = store.maxVisibleInMenuBar
+            let visibleConfigs = Array(configs.prefix(maxVisible))
+            let overflowCount = max(0, configs.count - maxVisible)
+
+            let providerDataList = visibleConfigs.map { buildProviderData(for: $0) }
+            button.title = ""
+            button.image = StatusItemRenderer.renderCombined(providers: providerDataList, overflowCount: overflowCount)
             button.toolTip = buildTooltip()
 
         case .vertical, .automatic:
             // Single TokenBar icon (compact footprint for notch avoidance)
             button.title = ""
-            let icon = NSImage(systemSymbolName: "gauge.with.needle.fill", accessibilityDescription: "TokenBar")
-            icon?.isTemplate = true
-            button.image = icon
-            button.toolTip = buildTooltip()
+            button.image = clock
+            button.toolTip = clockDescription + "\n" + buildTooltip()
         }
+
+        if store.orbitIconEnabled && (presentation == .horizontal || presentation == .hybrid), let details = button.image {
+            button.image = QuotaClockIcon.combining(clock: clock, details: details, dark: dark)
+            button.toolTip = clockDescription + "\n" + buildTooltip()
+        }
+        button.setAccessibilityLabel(button.toolTip)
 
         if let pop = popover, pop.isShown {
             let targetSize = currentPopoverSize()
@@ -385,6 +367,52 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         menu.addItem(quitItem)
 
         NSMenu.popUpContextMenu(menu, with: event, for: button)
+    }
+
+    private func buildProviderData(for config: ProviderConfig) -> StatusItemRenderer.ProviderData {
+        let usage = store.usage(for: config.id)
+        let ds = store.displaySetting(for: config.id)
+
+        var rateWindows: [StatusItemRenderer.RateWindowData] = []
+        if let s = usage.sessionPercent {
+            rateWindows.append(.init(
+                key: "session",
+                menuBarPrefix: nil,
+                usedPercent: s,
+                resetsAt: usage.sessionResetsAt,
+                windowMinutes: usage.sessionWindowMinutes,
+                settings: ds.settings(for: "session")
+            ))
+        }
+        if let w = usage.weeklyPercent {
+            rateWindows.append(.init(
+                key: "weekly",
+                menuBarPrefix: " W:",
+                usedPercent: w,
+                resetsAt: usage.weeklyResetsAt,
+                windowMinutes: usage.weeklyWindowMinutes,
+                settings: ds.settings(for: "weekly")
+            ))
+        }
+        for extra in usage.extraWindows {
+            let prefix = " \(extra.title.prefix(1)):"
+            rateWindows.append(.init(
+                key: extra.id,
+                menuBarPrefix: prefix,
+                usedPercent: extra.usedPercent,
+                resetsAt: extra.resetsAt,
+                windowMinutes: extra.windowMinutes,
+                settings: ds.settings(for: extra.id)
+            ))
+        }
+
+        return StatusItemRenderer.ProviderData(
+            providerID: config.id,
+            displayType: config.displayType,
+            balance: usage.balance,
+            showBalance: ds.showBalance,
+            rateWindows: rateWindows
+        )
     }
 
     private func buildTooltip() -> String {

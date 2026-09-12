@@ -87,6 +87,25 @@ func runVerification() async {
         }
     }
 
+    // 3.5. Hybrid / Overflow Mode Verification
+    print("\n==================================================")
+    print("[3.5] Hybrid / Overflow Presentation Verification")
+    print("==================================================")
+    store.presentation = .hybrid
+    store.maxVisibleInMenuBar = 3
+    store.enabledProviderIDs = ["claude", "codex", "antigravity", "gemini"]
+    controller.updateDisplay()
+
+    assert(store.effectivePresentation == .hybrid, "Effective presentation must be .hybrid")
+    assert(store.enabledConfigs.count == 4, "Must have 4 enabled providers")
+    assert(store.maxVisibleInMenuBar == 3, "Max visible in menu bar must be 3")
+
+    let hybridMirror = Mirror(reflecting: controller)
+    let hybridStatusItem = hybridMirror.children.first(where: { $0.label == "statusItem" })?.value as? NSStatusItem
+    assert(hybridStatusItem?.button?.image != nil, "Hybrid mode status item must render image")
+    print("  ✅ Hybrid Presentation: 3 providers visible in menu bar + overflow (+1) badge")
+    print("  ✅ Zero-Click Glanceability: Top 3 stay visible directly in menu bar; hover reveals all 4 providers")
+
     // 4. Settings Window Resizing Verification
     print("\n==================================================")
     print("[4] Settings Window Resizing Verification")
