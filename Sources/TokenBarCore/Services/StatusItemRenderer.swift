@@ -58,6 +58,7 @@ public enum StatusItemRenderer {
 
         let showAsUsed = UserDefaults.standard.object(forKey: "showUsageAsUsed") as? Bool ?? true
         let resetTimeAbsolute = UserDefaults.standard.bool(forKey: "resetTimeAsAbsolute")
+        let countdown5h = UserDefaults.standard.object(forKey: "countdownForFiveHourLimits") as? Bool ?? true
         let colorPercentText = UserDefaults.standard.bool(forKey: "colorPercentText")
         let colorCountdownText = UserDefaults.standard.bool(forKey: "colorCountdownText")
         let showThresholdTicks = UserDefaults.standard.bool(forKey: "showThresholdTicks")
@@ -122,7 +123,9 @@ public enum StatusItemRenderer {
                             segments.append(.init(.countdownBar(remainPct), countdownBarWidth))
                         }
                         if ws.showCountdownText {
-                            let rText = " \(ResetTimeFormatter.format(date: resetsAt, asAbsolute: resetTimeAbsolute))"
+                            let is5h = countdown5h && ((rw.windowMinutes ?? 300) <= 300)
+                            let effectiveAsAbsolute = is5h ? false : resetTimeAbsolute
+                            let rText = " \(ResetTimeFormatter.format(date: resetsAt, asAbsolute: effectiveAsAbsolute))"
                             let textColor: NSColor
                             if colorCountdownText {
                                 let winMin = Double(rw.windowMinutes ?? 300)

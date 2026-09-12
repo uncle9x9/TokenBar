@@ -203,4 +203,52 @@ final class ResetTimeFormatterTests: XCTestCase {
         let resetAbs = ResetTimeFormatter.absoluteDescription(from: in20Days, now: now)
         XCTAssertFalse(resetAbs.hasPrefix("Fri "), "Dates beyond 7 days must include month name, not just weekday")
     }
+
+    func testFiveHourLimitsCountdownEvenWhenClockEnabled() {
+        let now = Date()
+        let claudeConfig = ProviderConfig.byID["claude"]!
+
+        let in3h3m = now.addingTimeInterval(3 * 3600 + 3 * 60)
+        let in5d = now.addingTimeInterval(5 * 86400)
+        let claudeUsage = ProviderUsage(
+            id: "claude",
+            displayName: "Claude",
+            sessionPercent: 5.0,
+            sessionWindowMinutes: 300,
+            sessionResetsAt: in3h3m,
+            weeklyPercent: 18.0,
+            weeklyWindowMinutes: 10080,
+            weeklyResetsAt: in5d,
+            extraWindows: [
+                ExtraWindowUsage(id: "claude-fable", title: "Fable only", usedPercent: 0.0, resetsAt: in5d, windowMinutes: 10080)
+            ]
+        )
+
+        // Case 1: When clock reset time is enabled (asAbsolute = true) AND countdownForFiveHourLimits = true (default)
+        let windowsHybrid = claudeUsage.normalisedQuotaWindows(config: claudeConfig, asAbsolute: true, countdownForFiveHourLimits: true)
+        XCTAssertEqual(windowsHybrid.count, 3)
+        XCTAssertEqual(windowsHybrid[0].title, "5-hour limit")
+        XCTAssertEqual(windowsHybrid[0].resetText, "Resets in 3 hr 3 min", "5-hour limit must show relative countdown!")
+        XCTAssertTrue(windowsHybrid[1].resetText?.starts(with: "Resets ") == true)
+        XCTAssertFalse(windowsHybrid[1].resetText?.contains("in ") == true, "Weekly limit must show absolute timestamp!")
+
+        // Case 2: When user disables countdownForFiveHourLimits (countdownForFiveHourLimits = false)
+        let windowsClockOnly = claudeUsage.normalisedQuotaWindows(config: claudeConfig, asAbsolute: true, countdownForFiveHourLimits: false)
+        XCTAssertFalse(windowsClockOnly[0].resetText?.contains("in 3 hr") == true, "When disabled, 5-hour limit must use absolute clock")
+
+        // Case 3: Antigravity multi-provider 5-hour window
+        let antigravConfig = ProviderConfig.byID["antigravity"]!
+        let antigravUsage = ProviderUsage(
+            id: "antigravity",
+            displayName: "Antigrav",
+            extraWindows: [
+                ExtraWindowUsage(id: "g-5h", title: "Gemini 5-hour", usedPercent: 0.0, resetsAt: in3h3m, windowMinutes: 300),
+                ExtraWindowUsage(id: "g-w", title: "Gemini weekly", usedPercent: 13.0, resetsAt: in5d, windowMinutes: 10080)
+            ]
+        )
+        let antigravWindows = antigravUsage.normalisedQuotaWindows(config: antigravConfig, asAbsolute: true, countdownForFiveHourLimits: true)
+        XCTAssertEqual(antigravWindows[0].title, "Gemini 5-hour")
+        XCTAssertEqual(antigravWindows[0].resetText, "Resets in 3 hr 3 min", "Gemini 5-hour window must show countdown!")
+        XCTAssertFalse(antigravWindows[1].resetText?.contains("in ") == true, "Gemini weekly window must show absolute timestamp!")
+    }
 }

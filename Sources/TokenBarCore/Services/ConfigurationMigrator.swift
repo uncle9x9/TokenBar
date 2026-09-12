@@ -104,7 +104,7 @@ public enum ConfigurationMigrator {
     private static func copySettings(from source: UserDefaults, to target: UserDefaults) {
         let keys = [
             "enabledProviderIDs", "providerOrder", "refreshInterval",
-            "resetTimeAsAbsolute", "showUsageAsUsed", "colorPercentText",
+            "resetTimeAsAbsolute", "countdownForFiveHourLimits", "showUsageAsUsed", "colorPercentText",
             "colorCountdownText", "showThresholdTicks", "showWorkdayMarkers",
             "batterySaverEnabled", "launchAtLogin", "quotaNotifEnabled",
             "quotaNotifWarningThreshold", "quotaNotifCriticalThreshold",
@@ -120,7 +120,7 @@ public enum ConfigurationMigrator {
     private static func copySettings(from dict: [String: Any], to target: UserDefaults) {
         let keys = [
             "enabledProviderIDs", "providerOrder", "refreshInterval",
-            "resetTimeAsAbsolute", "showUsageAsUsed", "colorPercentText",
+            "resetTimeAsAbsolute", "countdownForFiveHourLimits", "showUsageAsUsed", "colorPercentText",
             "colorCountdownText", "showThresholdTicks", "showWorkdayMarkers",
             "batterySaverEnabled", "launchAtLogin", "quotaNotifEnabled",
             "quotaNotifWarningThreshold", "quotaNotifCriticalThreshold",

@@ -57,6 +57,12 @@ public final class UsageStore {
         }
     }
 
+    public var countdownForFiveHourLimits: Bool = true {
+        didSet {
+            UserDefaults.standard.set(countdownForFiveHourLimits, forKey: "countdownForFiveHourLimits")
+        }
+    }
+
     public var onRefreshingChanged: ((Bool) -> Void)?
     public var isRefreshing: Bool = false {
         didSet {
@@ -168,6 +174,11 @@ public final class UsageStore {
         }
 
         self.resetTimeAsAbsolute = UserDefaults.standard.bool(forKey: "resetTimeAsAbsolute")
+        if UserDefaults.standard.object(forKey: "countdownForFiveHourLimits") != nil {
+            self.countdownForFiveHourLimits = UserDefaults.standard.bool(forKey: "countdownForFiveHourLimits")
+        } else {
+            self.countdownForFiveHourLimits = true
+        }
 
         self.orbitProviderID = UserDefaults.standard.string(forKey: "orbitProviderID") ?? ""
         let savedOrbitWindow = UserDefaults.standard.string(forKey: "orbitWindowID")

@@ -53,7 +53,7 @@ public struct ConsolidatedQuotaPanelView: View {
 
         for config in configs {
             let usage = store.usage(for: config.id)
-            let windows = usage.normalisedQuotaWindows(config: config, asAbsolute: asAbsolute)
+            let windows = usage.normalisedQuotaWindows(config: config, asAbsolute: asAbsolute, countdownForFiveHourLimits: store.countdownForFiveHourLimits)
 
             // Provider identity row (15pt icon / 12.5pt semibold text)
             var sectionHeight: CGFloat = 18.0
@@ -190,7 +190,7 @@ public struct ConsolidatedQuotaPanelView: View {
     @ViewBuilder
     private func providerSection(config: ProviderConfig) -> some View {
         let usage = store.usage(for: config.id)
-        let windows = usage.normalisedQuotaWindows(config: config, asAbsolute: store.resetTimeAsAbsolute)
+        let windows = usage.normalisedQuotaWindows(config: config, asAbsolute: store.resetTimeAsAbsolute, countdownForFiveHourLimits: store.countdownForFiveHourLimits)
 
         VStack(alignment: .leading, spacing: 4) {
             // Provider Identity Row

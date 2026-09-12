@@ -208,6 +208,7 @@ public struct GeneralSettingsView: View {
     @AppStorage("launchAtLogin") private var launchAtLogin = false
     @AppStorage("showUsageAsUsed") private var showUsageAsUsed = true
     @AppStorage("resetTimeAsAbsolute") private var resetTimeAsAbsolute = false
+    @AppStorage("countdownForFiveHourLimits") private var countdownForFiveHourLimits = true
     @AppStorage("colorPercentText") private var colorPercentText = true
     @AppStorage("colorCountdownText") private var colorCountdownText = true
     @AppStorage("quotaNotifEnabled") private var quotaNotifEnabled = false
@@ -382,6 +383,15 @@ public struct GeneralSettingsView: View {
                     )
                     .onChange(of: resetTimeAsAbsolute) { _, val in
                         store.resetTimeAsAbsolute = val
+                    }
+
+                    PreferenceToggleRow(
+                        "Always countdown 5-hour limits",
+                        subtitle: "Keep dynamic countdown (e.g. Resets in 3 hr 3 min) for 5-hour limits even when clock reset time is enabled.",
+                        isOn: $countdownForFiveHourLimits
+                    )
+                    .onChange(of: countdownForFiveHourLimits) { _, val in
+                        store.countdownForFiveHourLimits = val
                     }
 
                     PreferenceToggleRow(

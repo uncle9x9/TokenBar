@@ -462,6 +462,7 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
 
     private func buildTooltip() -> String {
         let asAbsolute = UserDefaults.standard.bool(forKey: "resetTimeAsAbsolute")
+        let countdown5h = UserDefaults.standard.object(forKey: "countdownForFiveHourLimits") as? Bool ?? true
         var lines: [String] = []
         for config in store.enabledConfigs {
             let usage = store.usage(for: config.id)
@@ -469,7 +470,8 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
             if let s = usage.sessionPercent {
                 line += "\(Int(s))%"
                 if let w = usage.weeklyPercent { line += " · W:\(Int(w))%" }
-                if let reset = ResetTimeFormatter.resetLine(date: usage.sessionResetsAt, asAbsolute: asAbsolute) {
+                let is5h = countdown5h && (config.id == "claude" || config.id == "codex" || usage.sessionWindowMinutes == 300)
+                if let reset = ResetTimeFormatter.resetLine(date: usage.sessionResetsAt, asAbsolute: is5h ? false : asAbsolute) {
                     line += " · \(reset)"
                 }
             } else if let b = usage.balance {

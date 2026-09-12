@@ -155,8 +155,27 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
     /// - Antigrav: Gemini 5-hour, Gemini weekly, Claude/GPT 5-hour, Claude/GPT weekly
     /// - Codex: 5-hour, Weekly, gpt-reserve
     /// - Grok: Weekly / Monthly, On-demand
-    public func normalisedQuotaWindows(config: ProviderConfig, asAbsolute: Bool = false) -> [QuotaWindowItem] {
+    public func normalisedQuotaWindows(
+        config: ProviderConfig,
+        asAbsolute: Bool = false,
+        countdownForFiveHourLimits: Bool = UserDefaults.standard.object(forKey: "countdownForFiveHourLimits") as? Bool ?? true
+    ) -> [QuotaWindowItem] {
         var items: [QuotaWindowItem] = []
+
+        func windowAsAbsolute(title: String, windowMinutes: Int?, resetsAt: Date?) -> Bool {
+            guard countdownForFiveHourLimits else { return asAbsolute }
+            let lowerTitle = title.lowercased()
+            if lowerTitle.contains("5-hour") {
+                return false
+            }
+            if let windowMinutes, windowMinutes <= 300 {
+                return false
+            }
+            if config.id == "claude" && lowerTitle.contains("session") {
+                return false
+            }
+            return asAbsolute
+        }
 
         // If provider specifies rich explicit extra windows covering all its quota (like Antigravity), prefer them
         if config.id == "antigravity", !extraWindows.isEmpty {
@@ -166,7 +185,7 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
                     title: extra.title,
                     usedPercent: extra.usedPercent,
                     resetsAt: extra.resetsAt,
-                    asAbsolute: asAbsolute
+                    asAbsolute: windowAsAbsolute(title: extra.title, windowMinutes: extra.windowMinutes, resetsAt: extra.resetsAt)
                 ))
             }
             return items
@@ -204,7 +223,7 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
                 title: label,
                 usedPercent: s,
                 resetsAt: sessionResetsAt,
-                asAbsolute: asAbsolute
+                asAbsolute: windowAsAbsolute(title: label, windowMinutes: sessionWindowMinutes, resetsAt: sessionResetsAt)
             ))
         }
 
@@ -224,7 +243,7 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
                 title: label,
                 usedPercent: w,
                 resetsAt: weeklyResetsAt,
-                asAbsolute: asAbsolute
+                asAbsolute: windowAsAbsolute(title: label, windowMinutes: weeklyWindowMinutes, resetsAt: weeklyResetsAt)
             ))
         }
 
@@ -240,7 +259,7 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
                 title: label,
                 usedPercent: t,
                 resetsAt: tertiaryResetsAt,
-                asAbsolute: asAbsolute
+                asAbsolute: windowAsAbsolute(title: label, windowMinutes: tertiaryWindowMinutes, resetsAt: tertiaryResetsAt)
             ))
         }
 
@@ -254,7 +273,7 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
                 title: title,
                 usedPercent: extra.usedPercent,
                 resetsAt: extra.resetsAt,
-                asAbsolute: asAbsolute
+                asAbsolute: windowAsAbsolute(title: title, windowMinutes: extra.windowMinutes, resetsAt: extra.resetsAt)
             ))
         }
 
