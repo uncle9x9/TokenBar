@@ -5,6 +5,7 @@
 TokenBar brings unified, glanceable visibility to all your AI coding assistant quotas (Claude, Codex, Antigravity, Cursor, Grok, and 48+ other providers) without cluttering your menu bar or hiding metrics behind multiple clicks.
 
 <img width="559" height="695" alt="image" src="https://github.com/user-attachments/assets/ba772d47-8f06-4c3b-b07c-0645f7c80ede" />
+
 ---
 
 ## Core Design Principles
