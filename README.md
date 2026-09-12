@@ -5,40 +5,6 @@
 TokenBar brings unified, glanceable visibility to all your AI coding assistant quotas (Claude, Codex, Antigravity, Cursor, Grok, and 48+ other providers) without cluttering your menu bar or hiding metrics behind multiple clicks.
 
 <img width="559" height="695" alt="image" src="https://github.com/user-attachments/assets/ba772d47-8f06-4c3b-b07c-0645f7c80ede" />
-
-```
-┌────────────────────────────────────────────────────────┐
-│  TokenBar                           4 providers        │
-├────────────────────────────────────────────────────────┤
-│  Claude                                       ACTIVE ● │
-│  5-hour limit              Resets in 2 hr 45 min   38% │
-│  █████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  Weekly · all models       Resets Fri 9:00 AM      18% │
-│  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│                                                        │
-│  Cursor                                       ACTIVE ● │
-│  Total                     Resets in 28 days       14% │
-│  ███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  Cursor (Fast)             Resets in 28 days       18% │
-│  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│                                                        │
-│  Antigravity                                  ACTIVE ● │
-│  Gemini 5-hour             Resets in 1 hr 12 min   25% │
-│  ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  Claude/GPT 5-hour         Resets in 3 hr 50 min    0% │
-│  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│  Weekly                    Resets Fri 9:00 AM      10% │
-│  ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-│                                                        │
-│  Grok                                         ACTIVE ● │
-│  Weekly                    Resets Sun 11:59 PM     42% │
-│  ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
-├────────────────────────────────────────────────────────┤
-│  ↻ Refresh All             Updated 2 min ago           │
-│  ⚙ Settings…               •                      Quit │
-└────────────────────────────────────────────────────────┘
-```
-
 ---
 
 ## Core Design Principles
