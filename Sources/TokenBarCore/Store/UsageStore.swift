@@ -57,7 +57,12 @@ public final class UsageStore {
         }
     }
 
-    public var isRefreshing: Bool = false
+    public var onRefreshingChanged: ((Bool) -> Void)?
+    public var isRefreshing: Bool = false {
+        didSet {
+            onRefreshingChanged?(isRefreshing)
+        }
+    }
     public var orbitProviderID: String = "" {
         didSet { UserDefaults.standard.set(orbitProviderID, forKey: "orbitProviderID") }
     }

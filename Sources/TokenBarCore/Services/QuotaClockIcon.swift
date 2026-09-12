@@ -41,7 +41,7 @@ public struct QuotaClockState: Equatable, Sendable {
 /// Native vector drawing is required for a live, sixty-step status indicator.
 /// Normal glyphs are templates; exhaustion uses adaptive foreground plus system red.
 public enum QuotaClockIcon {
-    public static func render(state: QuotaClockState, dark: Bool = false, size: CGFloat = 18) -> NSImage {
+    public static func render(state: QuotaClockState, dark: Bool = false, size: CGFloat = 18, rotationAngle: CGFloat = 0) -> NSImage {
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             let scale = size / 18
             let foreground: NSColor = state.exhausted && dark ? .white : .black
@@ -56,6 +56,16 @@ public enum QuotaClockIcon {
                 path.appendArc(withCenter: center, radius: radius, startAngle: start, endAngle: end, clockwise: true)
                 path.stroke()
             }
+
+            NSGraphicsContext.saveGraphicsState()
+            if rotationAngle != 0 && state.remainingSteps == nil {
+                let transform = NSAffineTransform()
+                transform.translateX(by: center.x, yBy: center.y)
+                transform.rotate(byDegrees: rotationAngle)
+                transform.translateX(by: -center.x, yBy: -center.y)
+                transform.concat()
+            }
+
             // The subdued track keeps the clock silhouette recognisable near reset.
             arc(start: 80, end: -260, color: foreground.withAlphaComponent(0.20))
             if let steps = state.remainingSteps {
@@ -66,6 +76,7 @@ public enum QuotaClockIcon {
             } else {
                 arc(start: 80, end: -260, color: foreground.withAlphaComponent(0.65), dashed: true)
             }
+            NSGraphicsContext.restoreGraphicsState()
 
             let barRect = NSRect(x: center.x - 4.6 * scale, y: center.y - 1.55 * scale,
                                  width: 9.2 * scale, height: 3.1 * scale)

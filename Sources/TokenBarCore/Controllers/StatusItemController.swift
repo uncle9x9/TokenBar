@@ -72,6 +72,10 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
     private var isMouseInPopover = false
     public private(set) var isPinned = false
 
+    // Loading animation tracking (counter-clockwise rotation during refresh/loading)
+    private var loadingAnimationTimer: Timer?
+    public private(set) var loadingRotationAngle: CGFloat = 0
+
     private var buttonTrackingView: HoverTrackingView?
 
     public override init() {
@@ -101,15 +105,48 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
             buttonTrackingView = tracking
         }
 
+        store.onRefreshingChanged = { [weak self] isRefreshing in
+            Task { @MainActor in
+                if isRefreshing {
+                    self?.startLoadingAnimation()
+                } else {
+                    self?.stopLoadingAnimation()
+                }
+            }
+        }
+
         setupPopover()
+        if store.isRefreshing || store.lastRefreshTime == nil {
+            startLoadingAnimation()
+        }
         updateDisplay()
         startObserving()
     }
 
     deinit {
         observationTask?.cancel()
+        loadingAnimationTimer?.invalidate()
         hoverTimer?.invalidate()
         dismissTimer?.invalidate()
+    }
+
+    public func startLoadingAnimation() {
+        guard loadingAnimationTimer == nil else { return }
+        // 20 fps: 0.05s interval, +9 degrees per frame = 2.0s per 360 degree counter-clockwise revolution
+        loadingAnimationTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.loadingRotationAngle = (self.loadingRotationAngle + 9.0).truncatingRemainder(dividingBy: 360.0)
+                self.updateDisplay()
+            }
+        }
+    }
+
+    public func stopLoadingAnimation() {
+        loadingAnimationTimer?.invalidate()
+        loadingAnimationTimer = nil
+        loadingRotationAngle = 0
+        updateDisplay()
     }
 
     public func currentPopoverSize() -> NSSize {
@@ -170,7 +207,8 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         let config = store.orbitConfig
         let state = QuotaClockState(usage: config.map { store.usage(for: $0.id) }, windowID: store.orbitWindowID, now: now)
         let dark = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let clock = QuotaClockIcon.render(state: state, dark: dark)
+        let isInitialLoad = store.lastRefreshTime == nil && store.isRefreshing
+        let clock = QuotaClockIcon.render(state: state, dark: dark, rotationAngle: loadingRotationAngle)
         let clockDescription = state.description(provider: config?.displayName ?? "TokenBar",
                                                  window: store.orbitWindowID == "weekly" ? "Weekly" : "Session", now: now)
 
@@ -178,6 +216,13 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
             button.image = clock
             button.title = ""
             button.toolTip = "No providers enabled"
+            return
+        }
+
+        if isInitialLoad && presentation != .vertical {
+            button.title = ""
+            button.image = clock
+            button.toolTip = "TokenBar: Loading quotas…"
             return
         }
 

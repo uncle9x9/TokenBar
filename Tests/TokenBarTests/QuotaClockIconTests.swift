@@ -71,4 +71,27 @@ final class QuotaClockIconTests: XCTestCase {
         XCTAssertNotNil(light.tiffRepresentation)
         XCTAssertNotEqual(light.tiffRepresentation, dark.tiffRepresentation)
     }
+
+    func testUnavailableCounterClockwiseDottedRingRotation() {
+        let unavailableState = QuotaClockState(usage: nil, now: now)
+        XCTAssertNil(unavailableState.usedFraction)
+        XCTAssertNil(unavailableState.remainingSteps)
+
+        let frame0 = QuotaClockIcon.render(state: unavailableState, rotationAngle: 0)
+        let frame45 = QuotaClockIcon.render(state: unavailableState, rotationAngle: 45)
+        let frame90 = QuotaClockIcon.render(state: unavailableState, rotationAngle: 90)
+
+        XCTAssertNotNil(frame0.tiffRepresentation)
+        XCTAssertNotNil(frame45.tiffRepresentation)
+        XCTAssertNotNil(frame90.tiffRepresentation)
+
+        XCTAssertNotEqual(frame0.tiffRepresentation, frame45.tiffRepresentation, "Rotating unavailable dotted ring must alter frame representation")
+        XCTAssertNotEqual(frame45.tiffRepresentation, frame90.tiffRepresentation, "Counter-clockwise angle change must yield unique rotated animation frames")
+
+        // Valid countdown ring must NOT rotate away from 12 o'clock deadline
+        let validState = QuotaClockState(usage: usage(), now: now)
+        let valid0 = QuotaClockIcon.render(state: validState, rotationAngle: 0)
+        let valid45 = QuotaClockIcon.render(state: validState, rotationAngle: 45)
+        XCTAssertEqual(valid0.tiffRepresentation, valid45.tiffRepresentation, "Valid countdown ring must stay anchored to 12 o'clock")
+    }
 }
