@@ -85,6 +85,13 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         dismissTimer?.invalidate()
     }
 
+    public func currentPopoverSize() -> NSSize {
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
+        let maxAllowedHeight = max(380, screenHeight - 70)
+        let sizing = ConsolidatedQuotaPanelView.calculateSizing(store: store, maxAvailableHeight: maxAllowedHeight)
+        return NSSize(width: 360, height: sizing.targetHeight)
+    }
+
     private func setupPopover() {
         let p = NSPopover()
         p.behavior = .transient
@@ -101,7 +108,11 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
             }
         )
 
+        let initialSize = currentPopoverSize()
+        p.contentSize = initialSize
+
         let hostingController = NSHostingController(rootView: panelView)
+        hostingController.preferredContentSize = initialSize
         p.contentViewController = hostingController
         self.popover = p
     }
@@ -205,6 +216,14 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
             button.image = icon
             button.toolTip = buildTooltip()
         }
+
+        if let pop = popover, pop.isShown {
+            let targetSize = currentPopoverSize()
+            if pop.contentSize != targetSize {
+                pop.contentSize = targetSize
+                pop.contentViewController?.preferredContentSize = targetSize
+            }
+        }
     }
 
     public func rebuildMenu() {
@@ -215,6 +234,11 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
 
     public func showConsolidatedPanel(pinned: Bool = false) {
         guard let button = statusItem.button, let pop = popover else { return }
+
+        let targetSize = currentPopoverSize()
+        pop.contentSize = targetSize
+        pop.contentViewController?.preferredContentSize = targetSize
+
         if pop.isShown {
             if pinned { isPinned = true }
             return
@@ -391,9 +415,14 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         let hostingController = NSHostingController(rootView: settingsView)
         let window = NSWindow(contentViewController: hostingController)
         window.title = "TokenBar Settings"
-        window.styleMask = [.titled, .closable, .miniaturizable]
-        window.center()
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.minSize = NSSize(width: SettingsTab.defaultWidth, height: 480)
         window.isReleasedWhenClosed = false
+        if !window.setFrameUsingName("TokenBar.SettingsWindow") {
+            window.setContentSize(NSSize(width: SettingsTab.defaultWidth, height: SettingsTab.windowHeight))
+            window.center()
+        }
+        window.setFrameAutosaveName("TokenBar.SettingsWindow")
 
         let controller = NSWindowController(window: window)
         settingsWindowController = controller

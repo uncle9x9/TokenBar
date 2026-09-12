@@ -151,9 +151,9 @@ public struct SettingsView: View {
                 .tabItem { Label(SettingsTab.about.label, systemImage: SettingsTab.about.icon) }
                 .tag(SettingsTab.about)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-        .frame(width: contentWidth, height: contentHeight)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .frame(minWidth: contentWidth, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
         .onAppear {
             updateLayout(for: selectedTab, animate: false)
         }
@@ -163,34 +163,40 @@ public struct SettingsView: View {
     }
 
     private func updateLayout(for tab: SettingsTab, animate: Bool) {
-        let change = {
-            self.contentWidth = tab.preferredWidth
-            self.contentHeight = tab.preferredHeight
-        }
-        if animate {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) { change() }
-        } else {
-            change()
-        }
-        Self.resizeSettingsWindow(width: tab.preferredWidth, height: tab.preferredHeight, animate: animate)
+        self.contentWidth = tab.preferredWidth
+        self.contentHeight = tab.preferredHeight
+        Self.resizeSettingsWindow(preferredWidth: tab.preferredWidth, preferredHeight: tab.preferredHeight, animate: animate)
     }
 
     private static let settingsWindowIdentifier = "com_apple_SwiftUI_Settings_window"
     private static let knownTabTitles = Set(SettingsTab.allCases.map(\.label))
 
-    private static func resizeSettingsWindow(width: CGFloat, height: CGFloat, animate: Bool) {
+    private static func resizeSettingsWindow(preferredWidth: CGFloat, preferredHeight: CGFloat, animate: Bool) {
         guard let window = NSApp.windows.first(where: {
             $0.identifier?.rawValue == settingsWindowIdentifier
                 || knownTabTitles.contains($0.title)
                 || $0.title.contains("TokenBar Settings")
         }) else { return }
-        let toolbarHeight = window.frame.height - window.contentLayoutRect.height
-        guard toolbarHeight > 0 else { return }
-        let newSize = NSSize(width: width, height: height + toolbarHeight)
+
+        // Update minimum size for active tab
+        window.minSize = NSSize(width: preferredWidth, height: 480)
+
+        let toolbarHeight = max(0, window.frame.height - window.contentLayoutRect.height)
         var frame = window.frame
-        frame.origin.y += frame.size.height - newSize.height
-        frame.size = newSize
-        window.setFrame(frame, display: true, animate: animate)
+        let currentContentWidth = window.contentLayoutRect.width
+        let currentContentHeight = window.contentLayoutRect.height
+
+        // If current window is narrower than tab minimum width, expand width
+        let targetWidth = max(currentContentWidth, preferredWidth)
+        // Preserve user's resized height, ensuring it doesn't fall below preferred minimum
+        let targetHeight = max(currentContentHeight, preferredHeight)
+
+        let newSize = NSSize(width: targetWidth, height: targetHeight + toolbarHeight)
+        if frame.size != newSize {
+            frame.origin.y += frame.size.height - newSize.height
+            frame.size = newSize
+            window.setFrame(frame, display: true, animate: animate)
+        }
     }
 }
 
@@ -381,10 +387,12 @@ public struct ProvidersSettingsView: View {
                 store: store,
                 selectedID: $selectedID
             )
+            .frame(maxHeight: .infinity)
 
             if let id = selectedID ?? store.orderedProviderConfigs.first?.id,
                let config = ProviderConfig.byID[id] {
                 ProviderDetailView(config: config, store: store)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 ContentUnavailableView(
                     "Select a Provider",
@@ -394,7 +402,7 @@ public struct ProvidersSettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             if selectedID == nil {
                 selectedID = store.orderedProviderConfigs.first?.id
@@ -488,6 +496,7 @@ public struct ProviderSidebarView: View {
                 }
                 .padding(.vertical, 4)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -497,7 +506,8 @@ public struct ProviderSidebarView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color(nsColor: .separatorColor).opacity(0.7), lineWidth: 1)
         )
-        .frame(minWidth: 240, maxWidth: 240)
+        .frame(minWidth: 240, maxWidth: 260)
+        .frame(maxHeight: .infinity)
     }
 }
 
@@ -694,11 +704,11 @@ public struct ProviderDetailView: View {
                     currentUsageSection(usage)
                 }
             }
-            .frame(maxWidth: 640, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 12)
             .padding(.horizontal, 8)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var providerHeader: some View {

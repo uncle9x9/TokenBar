@@ -157,6 +157,22 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
             let label: String
             if config.id == "claude" || sessionWindowMinutes == 300 {
                 label = "5-hour"
+            } else if config.id == "grok" {
+                if let resetsAt = sessionResetsAt {
+                    let duration = resetsAt.timeIntervalSince(Date())
+                    let days = Int((duration / 86400.0).rounded(.toNearestOrAwayFromZero))
+                    if (4...12).contains(days) || sessionWindowMinutes == nil {
+                        label = "Weekly"
+                    } else if (20...45).contains(days) {
+                        label = "Monthly"
+                    } else if sessionWindowMinutes == 300 {
+                        label = "5-hour"
+                    } else {
+                        label = "Credits"
+                    }
+                } else {
+                    label = "Credits"
+                }
             } else {
                 label = "Session"
             }
@@ -173,6 +189,8 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
             let label: String
             if config.id == "claude" {
                 label = "Weekly · all models"
+            } else if config.id == "grok" {
+                label = "On-demand"
             } else {
                 label = "Weekly"
             }

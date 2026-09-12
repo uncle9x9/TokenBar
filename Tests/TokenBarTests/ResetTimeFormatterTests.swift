@@ -110,4 +110,50 @@ final class ResetTimeFormatterTests: XCTestCase {
         let hour2 = now.addingTimeInterval(-7200)
         XCTAssertEqual(ResetTimeFormatter.relativeUpdatedDescription(from: hour2, now: now), "2h ago")
     }
+
+    func testGrokQuotaNormalisationAndDistinctFromXAI() {
+        let now = Date()
+
+        // 1. Distinction: Grok (Consumer / SuperGrok usageBar) vs xAI (Developer API balance)
+        let grokConfig = ProviderConfig.byID["grok"]
+        let xaiConfig = ProviderConfig.byID["xai"]
+        XCTAssertNotNil(grokConfig)
+        XCTAssertNotNil(xaiConfig)
+
+        XCTAssertEqual(grokConfig?.displayType, .usageBar, "Grok consumer subscription must use usageBar")
+        XCTAssertEqual(grokConfig?.sessionField, .primary)
+        XCTAssertEqual(grokConfig?.weeklyField, .secondary)
+
+        XCTAssertEqual(xaiConfig?.displayType, .balance, "xAI developer platform must use balance")
+        XCTAssertEqual(xaiConfig?.balanceField, .primary)
+
+        // 2. Grok Quota Normalisation: Primary Weekly (4 days) + Secondary On-demand
+        let grokUsage = ProviderUsage(
+            id: "grok",
+            displayName: "Grok",
+            sessionPercent: 42.0,
+            sessionWindowMinutes: 7 * 24 * 60,
+            sessionResetsAt: now.addingTimeInterval(4 * 86400),
+            weeklyPercent: 15.0,
+            weeklyWindowMinutes: nil,
+            weeklyResetsAt: nil
+        )
+
+        let grokWindows = grokUsage.normalisedQuotaWindows(config: grokConfig!)
+        XCTAssertEqual(grokWindows.count, 2)
+        XCTAssertEqual(grokWindows[0].title, "Weekly", "Primary Grok subscription quota window must be labeled Weekly")
+        XCTAssertEqual(grokWindows[0].usedPercent, 42.0)
+        XCTAssertEqual(grokWindows[1].title, "On-demand", "Secondary Grok quota window must be labeled On-demand")
+        XCTAssertEqual(grokWindows[1].usedPercent, 15.0)
+
+        // 3. Genuine Error State: Never invent quota data when upstream reports no fetch strategy / unauthenticated
+        let unauthGrok = ProviderUsage(
+            id: "grok",
+            displayName: "Grok",
+            error: "No available fetch strategy for grok."
+        )
+        XCTAssertFalse(unauthGrok.isConnected)
+        XCTAssertEqual(unauthGrok.statusDescription, "Error")
+        XCTAssertTrue(unauthGrok.normalisedQuotaWindows(config: grokConfig!).isEmpty, "Must not generate synthetic quota bars on error")
+    }
 }

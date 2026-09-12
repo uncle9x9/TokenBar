@@ -15,12 +15,15 @@ public enum ProviderIcons {
 
         let resourceName = "ProviderIcon-\(providerID)"
         #if SWIFT_PACKAGE
-        let moduleUrl = Bundle.module.url(forResource: resourceName, withExtension: "svg")
+        var moduleUrl = Bundle.module.url(forResource: resourceName, withExtension: "svg")
+        if moduleUrl == nil && providerID == "xai" {
+            moduleUrl = Bundle.module.url(forResource: "ProviderIcon-grok", withExtension: "svg")
+        }
         #else
-        let moduleUrl: URL? = nil
+        var moduleUrl: URL? = nil
         #endif
 
-        let url = moduleUrl ?? Bundle.main.url(forResource: resourceName, withExtension: "svg")
+        let url = moduleUrl ?? Bundle.main.url(forResource: resourceName, withExtension: "svg") ?? Bundle.main.url(forResource: "ProviderIcon-grok", withExtension: "svg")
 
         guard let url,
               let data = try? Data(contentsOf: url),

@@ -1,6 +1,18 @@
 import SwiftUI
 import AppKit
 
+public struct PanelSizing: Equatable, Sendable {
+    public let targetHeight: CGFloat
+    public let contentHeight: CGFloat
+    public let needsScroll: Bool
+
+    public init(targetHeight: CGFloat, contentHeight: CGFloat, needsScroll: Bool) {
+        self.targetHeight = targetHeight
+        self.contentHeight = contentHeight
+        self.needsScroll = needsScroll
+    }
+}
+
 public struct ConsolidatedQuotaPanelView: View {
     @Bindable var store: UsageStore
     public var onOpenSettings: (() -> Void)?
@@ -12,20 +24,82 @@ public struct ConsolidatedQuotaPanelView: View {
         self.onQuit = onQuit
     }
 
+    public static func calculateSizing(store: UsageStore, maxAvailableHeight: CGFloat) -> PanelSizing {
+        let configs = store.enabledConfigs
+        // Fixed chrome heights:
+        // Header: top 10 + text ~15 + bottom 8 = 33pt
+        // Top divider: 1pt
+        // Scroll content vertical padding: top 10 + bottom 10 = 20pt
+        // Bottom divider: 1pt
+        // Footer: top 8 + buttons ~15 + bottom 8 = 31pt
+        let fixedChromeHeight: CGFloat = 86.0
+
+        if configs.isEmpty {
+            let emptyStateHeight: CGFloat = 110.0
+            let total = emptyStateHeight + fixedChromeHeight
+            return PanelSizing(targetHeight: min(total, maxAvailableHeight), contentHeight: total, needsScroll: false)
+        }
+
+        var totalProvidersHeight: CGFloat = 0
+        let asAbsolute = store.resetTimeAsAbsolute
+
+        for config in configs {
+            let usage = store.usage(for: config.id)
+            let windows = usage.normalisedQuotaWindows(config: config, asAbsolute: asAbsolute)
+
+            // Provider identity row (15pt icon / 12.5pt semibold text)
+            var sectionHeight: CGFloat = 18.0
+
+            if !windows.isEmpty {
+                // 4pt spacing between identity row and quota windows
+                sectionHeight += 4.0
+                // Each quota window row: title/percent/reset (15pt) + 2pt spacing + 3.5pt bar + 1pt top padding = 21.5pt
+                let windowsHeight = CGFloat(windows.count) * 21.5
+                // 5pt spacing between multiple windows within the same provider
+                let windowsSpacing = CGFloat(max(0, windows.count - 1)) * 5.0
+                sectionHeight += windowsHeight + windowsSpacing
+            } else if usage.balance == nil && usage.error == nil {
+                // "Waiting for usage data…" placeholder
+                sectionHeight += 4.0 + 15.0
+            }
+
+            // Vertical padding for provider section (1pt top + 1pt bottom)
+            sectionHeight += 2.0
+            totalProvidersHeight += sectionHeight
+        }
+
+        // 10pt spacing between provider sections
+        let interProviderSpacing = CGFloat(max(0, configs.count - 1)) * 10.0
+        let rawContentHeight = totalProvidersHeight + interProviderSpacing + fixedChromeHeight
+
+        let targetHeight = min(rawContentHeight, maxAvailableHeight)
+        let needsScroll = rawContentHeight > (maxAvailableHeight + 1.0)
+
+        return PanelSizing(
+            targetHeight: ceil(targetHeight),
+            contentHeight: ceil(rawContentHeight),
+            needsScroll: needsScroll
+        )
+    }
+
     public var body: some View {
+        let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
+        let maxAllowedHeight = max(380, screenHeight - 70)
+        let sizing = Self.calculateSizing(store: store, maxAvailableHeight: maxAllowedHeight)
+
         VStack(spacing: 0) {
-            // Header Bar
+            // Header Bar (Pinned)
             headerBar
                 .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
 
             Divider()
                 .opacity(0.6)
 
-            // Providers Scrollable Area (Level 1: ALL providers immediately visible)
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 14) {
+            // Providers Area (Auto-sized: scroll only when genuinely exceeds screen height)
+            ScrollView(.vertical, showsIndicators: sizing.needsScroll) {
+                VStack(alignment: .leading, spacing: 10) {
                     let configs = store.enabledConfigs
                     if configs.isEmpty {
                         emptyStateView
@@ -36,19 +110,19 @@ public struct ConsolidatedQuotaPanelView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, 10)
             }
-            .frame(maxHeight: 460)
+            .scrollDisabled(!sizing.needsScroll)
 
             Divider()
                 .opacity(0.6)
 
-            // Footer Actions
+            // Footer Actions (Pinned)
             footerBar
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.vertical, 8)
         }
-        .frame(width: 350)
+        .frame(width: 360, height: sizing.targetHeight)
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.96))
     }
 
@@ -107,29 +181,29 @@ public struct ConsolidatedQuotaPanelView: View {
         let usage = store.usage(for: config.id)
         let windows = usage.normalisedQuotaWindows(config: config, asAbsolute: store.resetTimeAsAbsolute)
 
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             // Provider Identity Row
-            HStack(spacing: 8) {
-                if let icon = ProviderIcons.icon(for: config.id, size: 16) {
+            HStack(spacing: 7) {
+                if let icon = ProviderIcons.icon(for: config.id, size: 15) {
                     Image(nsImage: icon)
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 16, height: 16)
+                        .frame(width: 15, height: 15)
                         .foregroundStyle(.primary)
                 } else {
                     Image(systemName: "app.fill")
-                        .frame(width: 16, height: 16)
+                        .frame(width: 15, height: 15)
                 }
 
                 Text(config.displayName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
 
                 Spacer()
 
                 if let b = usage.balance {
                     Text(b)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 11.5, weight: .semibold))
                         .monospacedDigit()
                 } else if let err = usage.error {
                     Text(err)
@@ -143,20 +217,20 @@ public struct ConsolidatedQuotaPanelView: View {
 
             // Normalised Quota Windows (Level 1 Immediate Glancability)
             if !windows.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
                     ForEach(windows) { w in
                         quotaWindowRow(w)
                     }
                 }
-                .padding(.leading, 24)
+                .padding(.leading, 22)
             } else if usage.balance == nil && usage.error == nil {
                 Text("Waiting for usage data…")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
-                    .padding(.leading, 24)
+                    .padding(.leading, 22)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 1)
     }
 
     // MARK: - Quota Window Row (Claude Code Model)
@@ -167,7 +241,7 @@ public struct ConsolidatedQuotaPanelView: View {
                 Text(window.title)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(minWidth: 80, alignment: .leading)
+                    .frame(minWidth: 70, alignment: .leading)
 
                 // Consumed percentage
                 Text("\(Int(window.usedPercent))% used")
