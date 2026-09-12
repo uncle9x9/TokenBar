@@ -9,6 +9,7 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
     private let store = UsageStore.shared
     private var settingsWindowController: NSWindowController?
+    private var observationTask: Task<Void, Never>?
 
     public override init() {
         super.init()
@@ -17,39 +18,125 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     public func setup() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "gauge.with.needle.fill", accessibilityDescription: "TokenBar")
-            image?.isTemplate = true
-            button.image = image
-            button.imagePosition = .imageLeft
-        }
-
         menu.autoenablesItems = false
         menu.delegate = self
         statusItem.menu = menu
 
+        updateDisplay()
         rebuildMenu()
+        startObserving()
+    }
+
+    deinit {
+        observationTask?.cancel()
+    }
+
+    private func startObserving() {
+        observationTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                self?.updateDisplay()
+            }
+        }
     }
 
     public func menuWillOpen(_ menu: NSMenu) {
-        // Rebuild menu with latest store snapshot whenever opened
         rebuildMenu()
+    }
+
+    public func updateDisplay() {
+        guard let button = statusItem.button else { return }
+
+        let presentation = store.effectivePresentation
+        let configs = store.enabledConfigs
+
+        if configs.isEmpty {
+            button.image = nil
+            button.title = "TokenBar"
+            button.toolTip = "No providers enabled"
+            return
+        }
+
+        switch presentation {
+        case .horizontal:
+            // Upstream horizontal combined presentation
+            let providerDataList = configs.map { config -> StatusItemRenderer.ProviderData in
+                let usage = store.usage(for: config.id)
+                let ds = store.displaySetting(for: config.id)
+
+                var rateWindows: [StatusItemRenderer.RateWindowData] = []
+                if let s = usage.sessionPercent {
+                    rateWindows.append(.init(
+                        key: "session",
+                        menuBarPrefix: nil,
+                        usedPercent: s,
+                        resetsAt: usage.sessionResetsAt,
+                        windowMinutes: usage.sessionWindowMinutes,
+                        settings: ds.settings(for: "session")
+                    ))
+                }
+                if let w = usage.weeklyPercent {
+                    rateWindows.append(.init(
+                        key: "weekly",
+                        menuBarPrefix: " W:",
+                        usedPercent: w,
+                        resetsAt: usage.weeklyResetsAt,
+                        windowMinutes: usage.weeklyWindowMinutes,
+                        settings: ds.settings(for: "weekly")
+                    ))
+                }
+                for extra in usage.extraWindows {
+                    let prefix = " \(extra.title.prefix(1)):"
+                    rateWindows.append(.init(
+                        key: extra.id,
+                        menuBarPrefix: prefix,
+                        usedPercent: extra.usedPercent,
+                        resetsAt: extra.resetsAt,
+                        windowMinutes: extra.windowMinutes,
+                        settings: ds.settings(for: extra.id)
+                    ))
+                }
+
+                return StatusItemRenderer.ProviderData(
+                    providerID: config.id,
+                    displayType: config.displayType,
+                    balance: usage.balance,
+                    showBalance: ds.showBalance,
+                    rateWindows: rateWindows
+                )
+            }
+
+            button.title = ""
+            button.image = StatusItemRenderer.renderCombined(providers: providerDataList)
+            button.toolTip = buildTooltip()
+
+        case .vertical, .automatic:
+            // Single TokenBar icon
+            button.title = ""
+            let icon = NSImage(systemSymbolName: "gauge.with.needle.fill", accessibilityDescription: "TokenBar")
+            icon?.isTemplate = true
+            button.image = icon
+            button.toolTip = buildTooltip()
+        }
     }
 
     public func rebuildMenu() {
         menu.removeAllItems()
 
-        let menuWidth: CGFloat = 270
-
-        // 1. Header Card
-        let headerView = MenuHeaderView(store: store, width: menuWidth)
-        let headerItem = makeCustomMenuItem(view: headerView, width: menuWidth)
-        menu.addItem(headerItem)
-
-        menu.addItem(.separator())
-
-        // 2. Enabled Provider Rows
         let configs = store.enabledConfigs
+        let presentation = store.effectivePresentation
+
+        if presentation == .vertical {
+            // Header item
+            let headerItem = NSMenuItem(title: "TokenBar", action: nil, keyEquivalent: "")
+            let titleFont = NSFont.systemFont(ofSize: 13, weight: .bold)
+            headerItem.attributedTitle = NSAttributedString(string: "TokenBar", attributes: [.font: titleFont])
+            headerItem.isEnabled = false
+            menu.addItem(headerItem)
+
+            menu.addItem(.separator())
+        }
+
         if configs.isEmpty {
             let emptyItem = NSMenuItem(title: "No providers enabled", action: nil, keyEquivalent: "")
             emptyItem.isEnabled = false
@@ -57,14 +144,14 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         } else {
             for config in configs {
                 let usage = store.usage(for: config.id)
-                let rowItem = makeProviderRowMenuItem(config: config, usage: usage, width: menuWidth)
-                menu.addItem(rowItem)
+                let item = makeProviderMenuItem(config: config, usage: usage)
+                menu.addItem(item)
             }
         }
 
         menu.addItem(.separator())
 
-        // 3. Persistent Actions
+        // Persistent Actions
         let refreshItem = NSMenuItem(
             title: store.isRefreshing ? "Refreshing Providers…" : "Refresh All",
             action: #selector(refreshAllClicked),
@@ -90,15 +177,6 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         }
         menu.addItem(settingsItem)
 
-        let sampleItem = NSMenuItem(
-            title: "Load Sample Data",
-            action: #selector(loadSampleDataClicked),
-            keyEquivalent: "d"
-        )
-        sampleItem.keyEquivalentModifierMask = [.command, .option]
-        sampleItem.target = self
-        menu.addItem(sampleItem)
-
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -110,42 +188,98 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(quitItem)
     }
 
-    private func makeProviderRowMenuItem(config: ProviderConfig, usage: ProviderUsage, width: CGFloat) -> NSMenuItem {
-        let rowView = ProviderOverviewRowView(config: config, usage: usage, width: width)
-        let hostingView = NSHostingView(rootView: rowView)
-        hostingView.frame.size = hostingView.fittingSize
+    private func makeProviderMenuItem(config: ProviderConfig, usage: ProviderUsage) -> NSMenuItem {
+        let quotaText: String
+        if usage.error != nil {
+            quotaText = "Err"
+        } else if let s = usage.sessionPercent {
+            quotaText = "\(Int(s))%"
+        } else if let b = usage.balance {
+            quotaText = b
+        } else {
+            quotaText = "--"
+        }
 
         let item = NSMenuItem()
-        item.view = hostingView
+        if let icon = ProviderIcons.icon(for: config.id, size: 16) {
+            item.image = icon
+        } else {
+            item.image = NSImage(systemSymbolName: "app.fill", accessibilityDescription: nil)
+        }
+
+        // Use native paragraph style with tab stop for clean right-aligned quota display
+        let pStyle = NSMutableParagraphStyle()
+        let tab = NSTextTab(textAlignment: .right, location: 190, options: [:])
+        pStyle.tabStops = [tab]
+
+        let titleStr = "\(config.displayName)\t\(quotaText)"
+        let attrTitle = NSMutableAttributedString(string: titleStr, attributes: [
+            .font: NSFont.menuFont(ofSize: 14),
+            .paragraphStyle: pStyle
+        ])
+        item.attributedTitle = attrTitle
         item.representedObject = config.id
         item.target = self
-        item.action = #selector(providerRowClicked(_:))
+        item.action = #selector(providerItemClicked(_:))
 
-        // Attach native macOS-style secondary detail submenu
+        // Native detail submenu
         let detailSubmenu = NSMenu()
         detailSubmenu.autoenablesItems = false
 
-        let detailCard = ProviderDetailCardView(config: config, usage: usage, width: 280)
-        let detailHostingView = NSHostingView(rootView: detailCard)
-        detailHostingView.frame.size = detailHostingView.fittingSize
+        let cardView = ProviderDetailCardView(config: config, usage: usage, width: 280)
+        let hostingView = NSHostingView(rootView: cardView)
+        hostingView.frame.size = hostingView.fittingSize
 
-        let detailItem = NSMenuItem()
-        detailItem.view = detailHostingView
-        detailItem.isEnabled = false
-        detailSubmenu.addItem(detailItem)
+        let cardMenuItem = NSMenuItem()
+        cardMenuItem.view = hostingView
+        cardMenuItem.isEnabled = false
+        detailSubmenu.addItem(cardMenuItem)
+
+        detailSubmenu.addItem(.separator())
+
+        let refreshSingleItem = NSMenuItem(
+            title: "Refresh \(config.displayName)",
+            action: #selector(refreshSingleProviderClicked(_:)),
+            keyEquivalent: ""
+        )
+        refreshSingleItem.representedObject = config.id
+        refreshSingleItem.target = self
+        if let icon = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil) {
+            icon.isTemplate = true
+            refreshSingleItem.image = icon
+        }
+        detailSubmenu.addItem(refreshSingleItem)
 
         item.submenu = detailSubmenu
         return item
     }
 
-    private func makeCustomMenuItem<V: View>(view: V, width: CGFloat) -> NSMenuItem {
-        let hostingView = NSHostingView(rootView: view)
-        hostingView.frame.size = hostingView.fittingSize
+    private func buildTooltip() -> String {
+        let asAbsolute = UserDefaults.standard.bool(forKey: "resetTimeAsAbsolute")
+        var lines: [String] = []
+        for config in store.enabledConfigs {
+            let usage = store.usage(for: config.id)
+            var line = config.displayName + ": "
+            if let s = usage.sessionPercent {
+                line += "\(Int(s))%"
+                if let w = usage.weeklyPercent { line += " · W:\(Int(w))%" }
+                if let reset = ResetTimeFormatter.resetLine(date: usage.sessionResetsAt, asAbsolute: asAbsolute) {
+                    line += " · \(reset)"
+                }
+            } else if let b = usage.balance {
+                line += b
+            } else if let err = usage.error {
+                line += err
+            } else {
+                line += "--"
+            }
+            lines.append(line)
 
-        let item = NSMenuItem()
-        item.view = hostingView
-        item.isEnabled = false
-        return item
+            for extra in usage.extraWindows {
+                lines.append("  \(extra.title): \(Int(extra.usedPercent))%")
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Actions
@@ -153,6 +287,25 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func refreshAllClicked() {
         Task {
             await store.refreshAll()
+            updateDisplay()
+            rebuildMenu()
+        }
+    }
+
+    @objc private func refreshSingleProviderClicked(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        Task {
+            await store.refreshProvider(id: id)
+            updateDisplay()
+            rebuildMenu()
+        }
+    }
+
+    @objc private func providerItemClicked(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        Task {
+            await store.refreshProvider(id: id)
+            updateDisplay()
             rebuildMenu()
         }
     }
@@ -176,19 +329,6 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         settingsWindowController = controller
         controller.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    @objc private func loadSampleDataClicked() {
-        store.seedSampleData()
-        rebuildMenu()
-    }
-
-    @objc private func providerRowClicked(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        Task {
-            await store.refreshProvider(id: id)
-            rebuildMenu()
-        }
     }
 
     @objc private func quitClicked() {

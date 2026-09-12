@@ -25,7 +25,15 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$RELEASE_BIN" "$MACOS_DIR/TokenBar"
 chmod +x "$MACOS_DIR/TokenBar"
 
-cat > "$CONTENTS_DIR/Info.plist" <<EOF
+# Copy SVG icons
+cp "$ROOT_DIR/Sources/TokenBarCore/Resources/ProviderIcons/"*.svg "$RESOURCES_DIR/"
+
+# Copy SPM resource bundle if present
+if [ -d "$ROOT_DIR/.build/arm64-apple-macosx/release/TokenBar_TokenBarCore.bundle" ]; then
+    cp -R "$ROOT_DIR/.build/arm64-apple-macosx/release/TokenBar_TokenBarCore.bundle" "$RESOURCES_DIR/"
+fi
+
+cat > "$CONTENTS_DIR/Info.plist" << 'PLIST_EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -54,6 +62,6 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
     <string>Copyright © 2026 TokenBar Authors. MIT License.</string>
 </dict>
 </plist>
-EOF
+PLIST_EOF
 
 echo "==> TokenBar.app successfully packaged at: $APP_DIR"

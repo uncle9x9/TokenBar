@@ -20,6 +20,26 @@ public struct ExtraWindowUsage: Sendable, Equatable, Identifiable {
     }
 }
 
+public struct QuotaWindowItem: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let title: String
+    public let usedPercent: Double
+    public let resetsAt: Date?
+    public let resetText: String?
+
+    public init(id: String, title: String, usedPercent: Double, resetsAt: Date?, asAbsolute: Bool = false) {
+        self.id = id
+        self.title = title
+        self.usedPercent = max(0, min(100.0, usedPercent))
+        self.resetsAt = resetsAt
+        if let resetsAt {
+            self.resetText = ResetTimeFormatter.resetLine(date: resetsAt, asAbsolute: asAbsolute)
+        } else {
+            self.resetText = nil
+        }
+    }
+}
+
 public struct ProviderUsage: Sendable, Equatable, Identifiable {
     public var id: String
     public var displayName: String
@@ -74,7 +94,7 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
         self.error = error
     }
 
-    /// Primary display percentage: prefers session quota, then weekly quota.
+    /// Primary display percentage: consumed percentage in the primary window.
     public var primaryUsedPercent: Double? {
         sessionPercent ?? weeklyPercent
     }
@@ -113,5 +133,72 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
 
     public static func empty(config: ProviderConfig) -> ProviderUsage {
         ProviderUsage(id: config.id, displayName: config.displayName)
+    }
+
+    /// Normalises quota windows across all providers into the Claude Code behavioural model:
+    /// Window / scope, reset time, and consumed percentage.
+    public func normalisedQuotaWindows(config: ProviderConfig, asAbsolute: Bool = false) -> [QuotaWindowItem] {
+        var items: [QuotaWindowItem] = []
+
+        if config.id == "antigravity" && !extraWindows.isEmpty {
+            for extra in extraWindows {
+                items.append(QuotaWindowItem(
+                    id: extra.id,
+                    title: extra.title,
+                    usedPercent: extra.usedPercent,
+                    resetsAt: extra.resetsAt,
+                    asAbsolute: asAbsolute
+                ))
+            }
+            return items
+        }
+
+        if let s = sessionPercent {
+            let label: String
+            if config.id == "claude" || sessionWindowMinutes == 300 {
+                label = "5-hour"
+            } else {
+                label = "Session"
+            }
+            items.append(QuotaWindowItem(
+                id: "session",
+                title: label,
+                usedPercent: s,
+                resetsAt: sessionResetsAt,
+                asAbsolute: asAbsolute
+            ))
+        }
+
+        if let w = weeklyPercent {
+            let label: String
+            if config.id == "claude" {
+                label = "Weekly · all models"
+            } else {
+                label = "Weekly"
+            }
+            items.append(QuotaWindowItem(
+                id: "weekly",
+                title: label,
+                usedPercent: w,
+                resetsAt: weeklyResetsAt,
+                asAbsolute: asAbsolute
+            ))
+        }
+
+        for extra in extraWindows {
+            var title = extra.title
+            if config.id == "claude" && title.lowercased().contains("fable") {
+                title = "Weekly · Fable"
+            }
+            items.append(QuotaWindowItem(
+                id: extra.id,
+                title: title,
+                usedPercent: extra.usedPercent,
+                resetsAt: extra.resetsAt,
+                asAbsolute: asAbsolute
+            ))
+        }
+
+        return items
     }
 }

@@ -52,7 +52,6 @@ public actor CodexBarCLIBridge {
             let responses = try JSONDecoder().decode([CodexBarResponse].self, from: data)
             return responses
         } catch {
-            // Check if single object returned
             if let single = try? JSONDecoder().decode(CodexBarResponse.self, from: data) {
                 return [single]
             }
@@ -76,16 +75,12 @@ public actor CodexBarCLIBridge {
             return usage
         }
 
-        if let primary = data.primary {
-            usage.sessionPercent = primary.usedPercent
-            usage.sessionWindowMinutes = primary.windowMinutes
-            usage.sessionResetsAt = primary.resetsAt
-        }
-
-        if let secondary = data.secondary {
-            usage.weeklyPercent = secondary.usedPercent
-            usage.weeklyWindowMinutes = secondary.windowMinutes
-            usage.weeklyResetsAt = secondary.resetsAt
+        func window(for field: ProviderConfig.RateWindowField) -> RateWindow? {
+            switch field {
+            case .primary: return data.primary
+            case .secondary: return data.secondary
+            case .tertiary: return data.tertiary
+            }
         }
 
         if let extras = data.extraRateWindows {
@@ -100,12 +95,42 @@ public actor CodexBarCLIBridge {
             }
         }
 
+        let org = data.accountOrganization ?? data.identity?.accountOrganization
+        usage.accountOrganization = org
         usage.accountEmail = data.accountEmail ?? data.identity?.accountEmail
-        usage.accountOrganization = data.accountOrganization ?? data.identity?.accountOrganization
         usage.loginMethod = data.loginMethod ?? data.identity?.loginMethod
         usage.lastUpdated = data.updatedAt ?? Date()
 
+        if config.displayType == .balance {
+            let win = window(for: config.balanceField ?? .primary)
+            if let desc = win?.resetDescription {
+                usage.balance = extractBalance(from: desc)
+            } else if let percent = win?.usedPercent {
+                usage.balance = "\(Int(percent))%"
+            }
+        } else {
+            let sessionWin = window(for: config.sessionField)
+            let weeklyWin = config.weeklyField.flatMap { window(for: $0) }
+            usage.sessionPercent = sessionWin?.usedPercent
+            usage.sessionWindowMinutes = sessionWin?.windowMinutes
+            usage.sessionResetsAt = sessionWin?.resetsAt
+
+            usage.weeklyPercent = weeklyWin?.usedPercent
+            usage.weeklyWindowMinutes = weeklyWin?.windowMinutes
+            usage.weeklyResetsAt = weeklyWin?.resetsAt
+        }
+
         return usage
+    }
+
+    public static func extractBalance(from description: String) -> String {
+        if let range = description.range(of: #"[¥$€£]\d+\.?\d*"#, options: .regularExpression) {
+            return String(description[range])
+        }
+        if let range = description.range(of: #"\d+\.?\d*\s*(credits?|pts?|points?)"#, options: [.regularExpression, .caseInsensitive]) {
+            return String(description[range])
+        }
+        return description
     }
 
     private func runProcess(executablePath: String, arguments: [String], timeout: TimeInterval) async throws -> Data {

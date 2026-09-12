@@ -28,24 +28,16 @@ public struct MigrationResult: Sendable, Equatable {
 public enum ConfigurationMigrator {
     public static let candidateSuites: [String] = [
         "com.lobo.CodexBarMenuBar",
-        "com.loboai.CodexBarMenuBar",
-        "com.steipete.codexbar"
+        "com.loboai.CodexBarMenuBar"
     ]
 
     public static let plistPaths: [String] = [
         NSHomeDirectory() + "/Library/Preferences/com.lobo.CodexBarMenuBar.plist",
-        NSHomeDirectory() + "/Library/Preferences/com.loboai.CodexBarMenuBar.plist",
-        NSHomeDirectory() + "/Library/Preferences/com.steipete.codexbar.plist"
+        NSHomeDirectory() + "/Library/Preferences/com.loboai.CodexBarMenuBar.plist"
     ]
 
-    public static let jsonConfigPaths: [String] = [
-        NSHomeDirectory() + "/.config/codexbar/config.json",
-        NSHomeDirectory() + "/.codexbar/config.json"
-    ]
-
-    /// Detects if an existing configuration exists and can be imported.
+    /// Detects if an existing CodexBarMenuBar configuration exists.
     public static func detectMigrationSource() -> (source: String, available: Bool) {
-        // 1. Check UserDefaults suites
         for suite in candidateSuites {
             if let defaults = UserDefaults(suiteName: suite),
                let enabled = defaults.array(forKey: "enabledProviderIDs") as? [String],
@@ -54,20 +46,11 @@ public enum ConfigurationMigrator {
             }
         }
 
-        // 2. Check Plist files on disk
         for path in plistPaths {
             if FileManager.default.fileExists(atPath: path),
                let dict = NSDictionary(contentsOfFile: path),
                let enabled = dict["enabledProviderIDs"] as? [String],
                !enabled.isEmpty {
-                let filename = (path as NSString).lastPathComponent
-                return (filename, true)
-            }
-        }
-
-        // 3. Check JSON configs
-        for path in jsonConfigPaths {
-            if FileManager.default.fileExists(atPath: path) {
                 return ((path as NSString).lastPathComponent, true)
             }
         }
@@ -75,75 +58,78 @@ public enum ConfigurationMigrator {
         return ("None", false)
     }
 
-    /// Performs the migration from detected sources into TokenBar.
+    /// Migrates all settings from CodexBarMenuBar into UserDefaults.standard.
     @discardableResult
     public static func performMigration() -> MigrationResult? {
-        // Strategy A: Try UserDefaults suite domains
+        let standard = UserDefaults.standard
+
+        // Strategy 1: UserDefaults suite
         for suite in candidateSuites {
             if let defaults = UserDefaults(suiteName: suite),
                let enabled = defaults.array(forKey: "enabledProviderIDs") as? [String],
                !enabled.isEmpty {
-                let order = (defaults.array(forKey: "providerOrder") as? [String]) ?? []
-                let interval = defaults.double(forKey: "refreshInterval")
-                let resetAbs = defaults.object(forKey: "resetTimeAsAbsolute") as? Bool
-
+                copySettings(from: defaults, to: standard)
                 return MigrationResult(
                     source: suite,
                     enabledProviderIDs: enabled,
-                    providerOrder: order,
-                    refreshInterval: interval > 0 ? interval : nil,
-                    resetTimeAsAbsolute: resetAbs,
-                    summary: "Imported \(enabled.count) enabled providers from \(suite)."
+                    providerOrder: (defaults.array(forKey: "providerOrder") as? [String]) ?? [],
+                    refreshInterval: defaults.double(forKey: "refreshInterval"),
+                    resetTimeAsAbsolute: defaults.bool(forKey: "resetTimeAsAbsolute"),
+                    summary: "Imported settings from \(suite) with \(enabled.count) providers."
                 )
             }
         }
 
-        // Strategy B: Try reading Plist directly from disk
+        // Strategy 2: Direct Plist file read
         for path in plistPaths {
             if FileManager.default.fileExists(atPath: path),
-               let dict = NSDictionary(contentsOfFile: path),
+               let dict = NSDictionary(contentsOfFile: path) as? [String: Any],
                let enabled = dict["enabledProviderIDs"] as? [String],
                !enabled.isEmpty {
-                let order = (dict["providerOrder"] as? [String]) ?? []
-                let interval = dict["refreshInterval"] as? Double
-                let resetAbs = dict["resetTimeAsAbsolute"] as? Bool
-                let filename = (path as NSString).lastPathComponent
-
+                copySettings(from: dict, to: standard)
                 return MigrationResult(
-                    source: filename,
+                    source: (path as NSString).lastPathComponent,
                     enabledProviderIDs: enabled,
-                    providerOrder: order,
-                    refreshInterval: interval,
-                    resetTimeAsAbsolute: resetAbs,
-                    summary: "Imported \(enabled.count) enabled providers from \(filename)."
+                    providerOrder: (dict["providerOrder"] as? [String]) ?? [],
+                    refreshInterval: dict["refreshInterval"] as? Double,
+                    resetTimeAsAbsolute: dict["resetTimeAsAbsolute"] as? Bool,
+                    summary: "Imported settings from \((path as NSString).lastPathComponent) with \(enabled.count) providers."
                 )
-            }
-        }
-
-        // Strategy C: Try reading CodexBar JSON config
-        for path in jsonConfigPaths {
-            if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let providers = json["providers"] as? [[String: Any]] {
-                var enabled: [String] = []
-                for p in providers {
-                    if let id = p["id"] as? String, (p["enabled"] as? Bool) == true {
-                        enabled.append(id)
-                    }
-                }
-                if !enabled.isEmpty {
-                    return MigrationResult(
-                        source: (path as NSString).lastPathComponent,
-                        enabledProviderIDs: enabled,
-                        providerOrder: enabled,
-                        refreshInterval: nil,
-                        resetTimeAsAbsolute: nil,
-                        summary: "Imported \(enabled.count) enabled providers from \((path as NSString).lastPathComponent)."
-                    )
-                }
             }
         }
 
         return nil
+    }
+
+    private static func copySettings(from source: UserDefaults, to target: UserDefaults) {
+        let keys = [
+            "enabledProviderIDs", "providerOrder", "refreshInterval",
+            "resetTimeAsAbsolute", "showUsageAsUsed", "colorPercentText",
+            "colorCountdownText", "showThresholdTicks", "showWorkdayMarkers",
+            "batterySaverEnabled", "launchAtLogin", "quotaNotifEnabled",
+            "quotaNotifWarningThreshold", "quotaNotifCriticalThreshold",
+            "providerDisplaySettings"
+        ]
+        for key in keys {
+            if let val = source.object(forKey: key) {
+                target.set(val, forKey: key)
+            }
+        }
+    }
+
+    private static func copySettings(from dict: [String: Any], to target: UserDefaults) {
+        let keys = [
+            "enabledProviderIDs", "providerOrder", "refreshInterval",
+            "resetTimeAsAbsolute", "showUsageAsUsed", "colorPercentText",
+            "colorCountdownText", "showThresholdTicks", "showWorkdayMarkers",
+            "batterySaverEnabled", "launchAtLogin", "quotaNotifEnabled",
+            "quotaNotifWarningThreshold", "quotaNotifCriticalThreshold",
+            "providerDisplaySettings"
+        ]
+        for key in keys {
+            if let val = dict[key] {
+                target.set(val, forKey: key)
+            }
+        }
     }
 }

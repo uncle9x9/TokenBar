@@ -10,26 +10,44 @@ public final class UsageStore {
 
     public var enabledProviderIDs: [String] = [] {
         didSet {
-            UserDefaults.standard.set(enabledProviderIDs, forKey: "tokenbar_enabled_provider_ids")
+            UserDefaults.standard.set(enabledProviderIDs, forKey: "enabledProviderIDs")
         }
     }
 
     public var providerOrder: [String] = [] {
         didSet {
-            UserDefaults.standard.set(providerOrder, forKey: "tokenbar_provider_order")
+            UserDefaults.standard.set(providerOrder, forKey: "providerOrder")
         }
     }
 
-    public var refreshInterval: TimeInterval = 120.0 {
+    public var displaySettings: [String: ProviderDisplaySettings] = [:] {
         didSet {
-            UserDefaults.standard.set(refreshInterval, forKey: "tokenbar_refresh_interval")
+            saveDisplaySettings()
+        }
+    }
+
+    public var presentation: MenuBarPresentation = .automatic {
+        didSet {
+            UserDefaults.standard.set(presentation.rawValue, forKey: "menuBarPresentation")
+        }
+    }
+
+    public var autoConsolidateThreshold: Int = 4 {
+        didSet {
+            UserDefaults.standard.set(autoConsolidateThreshold, forKey: "autoConsolidateThreshold")
+        }
+    }
+
+    public var refreshInterval: Double = 300.0 {
+        didSet {
+            UserDefaults.standard.set(refreshInterval, forKey: "refreshInterval")
             restartTimer()
         }
     }
 
     public var resetTimeAsAbsolute: Bool = false {
         didSet {
-            UserDefaults.standard.set(resetTimeAsAbsolute, forKey: "tokenbar_reset_as_absolute")
+            UserDefaults.standard.set(resetTimeAsAbsolute, forKey: "resetTimeAsAbsolute")
         }
     }
 
@@ -41,47 +59,31 @@ public final class UsageStore {
     private var timerTask: Task<Void, Never>?
     private let cliBridge = CodexBarCLIBridge.shared
 
-    public init() {
-        let hasMigrated = UserDefaults.standard.bool(forKey: "tokenbar_migration_completed")
+    public var enabledIDSet: Set<String> { Set(enabledProviderIDs) }
 
-        if let saved = UserDefaults.standard.stringArray(forKey: "tokenbar_enabled_provider_ids"), !saved.isEmpty {
-            self.enabledProviderIDs = saved
-        } else {
-            self.enabledProviderIDs = ProviderConfig.defaultEnabledIDs
-        }
-
-        if let savedOrder = UserDefaults.standard.stringArray(forKey: "tokenbar_provider_order"), !savedOrder.isEmpty {
-            self.providerOrder = savedOrder
-        } else {
-            self.providerOrder = ProviderConfig.allProviders.map(\.id)
-        }
-
-        let savedInterval = UserDefaults.standard.double(forKey: "tokenbar_refresh_interval")
-        if savedInterval > 0 {
-            self.refreshInterval = savedInterval
-        }
-
-        self.resetTimeAsAbsolute = UserDefaults.standard.bool(forKey: "tokenbar_reset_as_absolute")
-
-        // First launch auto-migration from previous CodexBarMenuBar if available
-        if !hasMigrated {
-            checkAndRunFirstLaunchMigration()
-        }
-
-        // Initialize empty records for enabled providers
-        for id in enabledProviderIDs {
-            if let config = ProviderConfig.byID[id] {
-                self.usages[id] = ProviderUsage.empty(config: config)
-            }
+    public var enabledConfigs: [ProviderConfig] {
+        let enabled = enabledIDSet
+        return providerOrder.compactMap { id in
+            guard enabled.contains(id) else { return nil }
+            return ProviderConfig.byID[id]
         }
     }
 
-    /// Automatically migrates settings from previous CodexBarMenuBar installation if present.
-    public func checkAndRunFirstLaunchMigration() {
-        if let result = ConfigurationMigrator.performMigration() {
-            applyMigrationResult(result)
-            UserDefaults.standard.set(true, forKey: "tokenbar_migration_completed")
-            UserDefaults.standard.set(result.source, forKey: "tokenbar_migration_source")
+    public var orderedProviderConfigs: [ProviderConfig] {
+        providerOrder.compactMap { id in
+            ProviderConfig.byID[id]
+        }
+    }
+
+    /// Resolves the effective menu bar presentation (Horizontal vs Vertical).
+    public var effectivePresentation: MenuBarPresentation {
+        switch presentation {
+        case .horizontal:
+            return .horizontal
+        case .vertical:
+            return .vertical
+        case .automatic:
+            return enabledConfigs.count >= autoConsolidateThreshold ? .vertical : .horizontal
         }
     }
 
@@ -89,72 +91,101 @@ public final class UsageStore {
     @discardableResult
     public func migrateFromPreviousConfig() -> MigrationResult? {
         guard let result = ConfigurationMigrator.performMigration() else { return nil }
-        applyMigrationResult(result)
-        UserDefaults.standard.set(true, forKey: "tokenbar_migration_completed")
-        UserDefaults.standard.set(result.source, forKey: "tokenbar_migration_source")
-        return result
-    }
-
-    private func applyMigrationResult(_ result: MigrationResult) {
         self.lastMigrationResult = result
-
-        // Filter valid known provider IDs
-        let validIDs = result.enabledProviderIDs.filter { ProviderConfig.byID[$0] != nil }
-        if !validIDs.isEmpty {
-            self.enabledProviderIDs = validIDs
-        }
-
+        self.enabledProviderIDs = result.enabledProviderIDs
         if !result.providerOrder.isEmpty {
-            self.providerOrder = result.providerOrder.filter { ProviderConfig.byID[$0] != nil }
+            self.providerOrder = result.providerOrder
         }
-
         if let interval = result.refreshInterval, interval > 0 {
             self.refreshInterval = interval
         }
-
         if let absolute = result.resetTimeAsAbsolute {
             self.resetTimeAsAbsolute = absolute
         }
+        return result
+    }
+
+    public init() {
+        let hasMigrated = UserDefaults.standard.bool(forKey: "tokenbar_migrated_from_upstream")
+
+        if !hasMigrated && UserDefaults.standard.array(forKey: "enabledProviderIDs") == nil {
+            if let result = ConfigurationMigrator.performMigration() {
+                self.lastMigrationResult = result
+                UserDefaults.standard.set(true, forKey: "tokenbar_migrated_from_upstream")
+            }
+        }
+
+        if let savedEnabled = UserDefaults.standard.array(forKey: "enabledProviderIDs") as? [String], !savedEnabled.isEmpty {
+            self.enabledProviderIDs = savedEnabled
+        } else {
+            self.enabledProviderIDs = ProviderConfig.defaultEnabledIDs
+        }
+
+        let allIDs = ProviderConfig.allProviders.map(\.id)
+        if let savedOrder = UserDefaults.standard.array(forKey: "providerOrder") as? [String], !savedOrder.isEmpty {
+            let allSet = Set(allIDs)
+            var order = savedOrder.filter { allSet.contains($0) }
+            let missing = allIDs.filter { !order.contains($0) }
+            order.append(contentsOf: missing)
+            self.providerOrder = order
+        } else {
+            self.providerOrder = allIDs
+        }
+
+        let savedInterval = UserDefaults.standard.double(forKey: "refreshInterval")
+        if savedInterval > 0 {
+            self.refreshInterval = savedInterval
+        }
+
+        self.resetTimeAsAbsolute = UserDefaults.standard.bool(forKey: "resetTimeAsAbsolute")
+
+        if let savedPresentationStr = UserDefaults.standard.string(forKey: "menuBarPresentation"),
+           let p = MenuBarPresentation(rawValue: savedPresentationStr) {
+            self.presentation = p
+        } else {
+            self.presentation = .automatic
+        }
+
+        let savedThreshold = UserDefaults.standard.integer(forKey: "autoConsolidateThreshold")
+        if savedThreshold > 0 {
+            self.autoConsolidateThreshold = savedThreshold
+        } else {
+            self.autoConsolidateThreshold = 4
+        }
+
+        loadDisplaySettings()
 
         for id in enabledProviderIDs {
-            if self.usages[id] == nil, let config = ProviderConfig.byID[id] {
-                self.usages[id] = ProviderUsage.empty(config: config)
+            if let config = ProviderConfig.byID[id] {
+                self.usages[id] = ProviderUsage(id: config.id, displayName: config.displayName)
             }
         }
     }
 
-    /// Returns enabled configs ordered according to providerOrder, with any remaining at the end.
-    public var enabledConfigs: [ProviderConfig] {
-        let enabled = Set(enabledProviderIDs)
-        var configs: [ProviderConfig] = []
-        var added = Set<String>()
-
-        for id in providerOrder {
-            if enabled.contains(id), let config = ProviderConfig.byID[id], !added.contains(id) {
-                configs.append(config)
-                added.insert(id)
-            }
-        }
-
-        for id in enabledProviderIDs {
-            if !added.contains(id), let config = ProviderConfig.byID[id] {
-                configs.append(config)
-                added.insert(id)
-            }
-        }
-
-        return configs
+    public func displaySetting(for id: String) -> ProviderDisplaySettings {
+        displaySettings[id] ?? ProviderDisplaySettings()
     }
 
     public func usage(for id: String) -> ProviderUsage {
-        usages[id] ?? ProviderUsage(id: id, displayName: ProviderConfig.byID[id]?.displayName ?? id)
+        usages[id] ?? (ProviderConfig.byID[id].map { ProviderUsage(id: $0.id, displayName: $0.displayName) } ?? ProviderUsage(id: id, displayName: id))
+    }
+
+    private func saveDisplaySettings() {
+        if let data = try? JSONEncoder().encode(displaySettings) {
+            UserDefaults.standard.set(data, forKey: "providerDisplaySettings")
+        }
+    }
+
+    private func loadDisplaySettings() {
+        if let data = UserDefaults.standard.data(forKey: "providerDisplaySettings"),
+           let decoded = try? JSONDecoder().decode([String: ProviderDisplaySettings].self, from: data) {
+            displaySettings = decoded
+        }
     }
 
     public func start() {
-        startTimer()
-        Task {
-            await refreshAll()
-        }
+        Task { await refreshAll() }
+        restartTimer()
     }
 
     public func stop() {
@@ -164,153 +195,121 @@ public final class UsageStore {
 
     public func restartTimer() {
         stop()
-        startTimer()
-    }
-
-    private func startTimer() {
         guard refreshInterval > 0 else { return }
         timerTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64((self?.refreshInterval ?? 120.0) * 1_000_000_000))
-                guard !Task.isCancelled else { break }
+                try? await Task.sleep(for: .seconds(self?.refreshInterval ?? 300))
                 await self?.refreshAll()
             }
         }
     }
 
     public func refreshAll() async {
-        guard !isRefreshing else { return }
         isRefreshing = true
-        lastError = nil
         defer {
             isRefreshing = false
             lastRefreshTime = Date()
-            StatusItemController.shared.rebuildMenu()
         }
 
         let configs = enabledConfigs
-        guard !configs.isEmpty else { return }
+        var results: [(String, Result<[CodexBarResponse], Error>)] = []
 
-        await withTaskGroup(of: (String, Result<CodexBarResponse, Error>).self) { group in
+        await withTaskGroup(of: (String, Result<[CodexBarResponse], Error>).self) { group in
             for config in configs {
                 group.addTask {
                     do {
-                        let results = try await self.cliBridge.fetchUsage(provider: config.cliName, timeoutSeconds: 15.0)
-                        if let first = results.first {
-                            return (config.id, .success(first))
-                        }
-                        throw CLIBridgeError.executionFailed("Empty response from codexbar")
+                        let responses = try await self.cliBridge.fetchUsage(provider: config.cliName)
+                        return (config.id, .success(responses))
                     } catch {
                         return (config.id, .failure(error))
                     }
                 }
             }
+            for await item in group {
+                results.append(item)
+            }
+        }
 
-            for await (id, result) in group {
-                guard let config = ProviderConfig.byID[id] else { continue }
-                switch result {
-                case .success(let response):
-                    self.usages[id] = CodexBarCLIBridge.mapResponseToUsage(response, config: config)
-                case .failure(let err):
-                    var existing = self.usages[id] ?? ProviderUsage.empty(config: config)
-                    existing.error = err.localizedDescription
-                    self.usages[id] = existing
+        for (id, result) in results {
+            guard let config = ProviderConfig.byID[id] else { continue }
+            switch result {
+            case .success(let responses):
+                if let first = responses.first {
+                    usages[id] = CodexBarCLIBridge.mapResponseToUsage(first, config: config)
                 }
+            case .failure(let error):
+                var current = usages[id] ?? ProviderUsage(id: config.id, displayName: config.displayName)
+                current.error = error.localizedDescription
+                usages[id] = current
             }
         }
     }
 
     public func refreshProvider(id: String) async {
         guard let config = ProviderConfig.byID[id] else { return }
-        defer {
-            StatusItemController.shared.rebuildMenu()
-        }
         do {
-            let results = try await cliBridge.fetchUsage(provider: config.cliName, timeoutSeconds: 10.0)
-            if let first = results.first {
-                self.usages[id] = CodexBarCLIBridge.mapResponseToUsage(first, config: config)
+            let responses = try await cliBridge.fetchUsage(provider: config.cliName)
+            if let first = responses.first {
+                usages[id] = CodexBarCLIBridge.mapResponseToUsage(first, config: config)
             }
         } catch {
-            var existing = self.usages[id] ?? ProviderUsage.empty(config: config)
-            existing.error = error.localizedDescription
-            self.usages[id] = existing
+            var current = usages[id] ?? ProviderUsage(id: config.id, displayName: config.displayName)
+            current.error = error.localizedDescription
+            usages[id] = current
         }
     }
 
-    /// Seeds realistic mock data for preview/demonstration if no live CLI is connected.
     public func seedSampleData() {
-        let now = Date()
-        self.usages["claude"] = ProviderUsage(
+        usages["claude"] = ProviderUsage(
             id: "claude",
             displayName: "Claude",
-            sessionPercent: 49.0,
+            sessionPercent: 20.0,
             sessionWindowMinutes: 300,
-            sessionResetsAt: now.addingTimeInterval(3600 * 2.5),
-            weeklyPercent: 71.0,
+            sessionResetsAt: Date().addingTimeInterval(3600 * 2.5),
+            weeklyPercent: 18.0,
             weeklyWindowMinutes: 10080,
-            weeklyResetsAt: now.addingTimeInterval(3600 * 54),
-            extraWindows: [
-                ExtraWindowUsage(id: "opus", title: "Opus Allowance", usedPercent: 18.0, resetsAt: now.addingTimeInterval(3600 * 2.5))
-            ],
-            accountEmail: "developer@anthropic.com",
-            source: "Web",
-            lastUpdated: now
+            weeklyResetsAt: Date().addingTimeInterval(86400 * 5),
+            accountOrganization: "Sample Organization",
+            source: "web",
+            lastUpdated: Date()
         )
 
-        self.usages["codex"] = ProviderUsage(
+        usages["codex"] = ProviderUsage(
             id: "codex",
-            displayName: "OpenAI / Codex",
+            displayName: "Codex",
             sessionPercent: 0.0,
-            sessionWindowMinutes: 180,
-            sessionResetsAt: now.addingTimeInterval(3600 * 1.8),
-            weeklyPercent: 71.0,
+            sessionWindowMinutes: 300,
+            sessionResetsAt: Date().addingTimeInterval(3600 * 4),
+            weeklyPercent: 0.0,
             weeklyWindowMinutes: 10080,
-            weeklyResetsAt: now.addingTimeInterval(3600 * 61),
-            extraWindows: [
-                ExtraWindowUsage(id: "gpt4_review", title: "Code Review", usedPercent: 87.0, resetsAt: now.addingTimeInterval(3600 * 61))
-            ],
-            accountOrganization: "OpenAI Team",
-            source: "OAuth",
-            lastUpdated: now
+            weeklyResetsAt: Date().addingTimeInterval(86400 * 6),
+            accountOrganization: "Plus Plan",
+            source: "oauth",
+            lastUpdated: Date()
         )
 
-        self.usages["gemini"] = ProviderUsage(
-            id: "gemini",
-            displayName: "Gemini",
-            sessionPercent: 100.0,
-            sessionWindowMinutes: 60,
-            sessionResetsAt: now.addingTimeInterval(3600 * 0.4),
-            weeklyPercent: 22.0,
-            weeklyWindowMinutes: 10080,
-            weeklyResetsAt: now.addingTimeInterval(3600 * 80),
-            source: "Google AI",
-            lastUpdated: now
-        )
-
-        self.usages["antigravity"] = ProviderUsage(
+        usages["antigravity"] = ProviderUsage(
             id: "antigravity",
-            displayName: "Antigravity",
-            sessionPercent: 100.0,
-            sessionWindowMinutes: 1440,
-            sessionResetsAt: now.addingTimeInterval(3600 * 14),
-            weeklyPercent: 35.0,
+            displayName: "Antigrav",
+            sessionPercent: 20.5,
+            sessionWindowMinutes: 300,
+            sessionResetsAt: Date().addingTimeInterval(3600 * 2.4),
+            weeklyPercent: 4.7,
             weeklyWindowMinutes: 10080,
-            weeklyResetsAt: now.addingTimeInterval(3600 * 92),
-            source: "AGY SDK",
-            lastUpdated: now
+            weeklyResetsAt: Date().addingTimeInterval(86400 * 2.8),
+            accountOrganization: "Google AI Pro",
+            source: "app",
+            lastUpdated: Date()
         )
 
-        self.usages["cursor"] = ProviderUsage(
-            id: "cursor",
-            displayName: "Cursor",
-            sessionPercent: 36.0,
-            sessionWindowMinutes: 1440,
-            sessionResetsAt: now.addingTimeInterval(3600 * 8),
-            weeklyPercent: 55.0,
-            weeklyWindowMinutes: 10080,
-            weeklyResetsAt: now.addingTimeInterval(3600 * 110),
-            source: "Cursor Pro",
-            lastUpdated: now
+        usages["deepseek"] = ProviderUsage(
+            id: "deepseek",
+            displayName: "DeepSeek",
+            balance: "¥32.50",
+            source: "api",
+            lastUpdated: Date()
         )
+
+        lastRefreshTime = Date()
     }
 }

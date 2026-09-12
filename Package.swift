@@ -21,7 +21,10 @@ let package = Package(
         .target(
             name: "TokenBarCore",
             dependencies: [],
-            path: "Sources/TokenBarCore"
+            path: "Sources/TokenBarCore",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .executableTarget(
             name: "TokenBar",

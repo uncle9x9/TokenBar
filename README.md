@@ -1,120 +1,99 @@
 # TokenBar
 
-> One menu-bar icon for all your AI coding quotas.
+> Presentation extension for CodexBarMenuBar with Claude Code-inspired quota psychology and notch-friendly consolidation.
 
-TokenBar is a lightweight, polished native macOS menu-bar dashboard that tracks quotas and remaining allowances for AI coding providers.
+TokenBar is a native macOS menu-bar dashboard that tracks quotas and usage windows for AI coding providers.
 
 ```
-  TokenBar [5 providers]
-  ─────────────────────────────────────
-  ✦ Claude               51% ▰▰▰▱  ›  ──►  ┌──────────────────────────────┐
-  ◉ OpenAI / Codex      100% ▰▰▰▰  ›       │ OPENAI / CODEX    [Connected]│
-  ⚛ Gemini                0% ▱▱▱▱  ›       │ ──────────────────────────── │
-  ⚡ Antigravity           0% ▱▱▱▱  ›       │ Current       100% remaining │
-  ➤ Cursor               64% ▰▰▰▱  ›       │ ████████████████████████████ │
-  ─────────────────────────────────────    │ Weekly         29% remaining │
-  ↻ Refresh All               (⌘R)         │ ████████░░░░░░░░░░░░░░░░░░░░ │
-  ⚙ Settings…                 (⌘,)         │ Code Review    13% remaining │
-  ⏻ Quit TokenBar             (⌘Q)         │ ███░░░░░░░░░░░░░░░░░░░░░░░░░ │
-                                           │ ──────────────────────────── │
-                                           │ Reset:              in 2d 13h│
-                                           │ Updated:           15 sec ago│
-                                           │ Source:                 OAuth│
-                                           │ Organization:     OpenAI Team│
-                                           └──────────────────────────────┘
+  TokenBar
+  ──────────────────────────────────────
+  Claude                          20%  ›  ──►  ┌──────────────────────────────┐
+  Codex                            0%  ›       │ Claude                       │
+  Antigrav                        24%  ›       │ codexbar usage --provider... │
+  ──────────────────────────────────────       │ ──────────────────────────── │
+  Refresh All                     (⌘R)         │ 5-hour                       │
+  Settings…                       (⌘,)         │ Resets in 25 min         20% │
+  Quit TokenBar                   (⌘Q)         │ ████░░░░░░░░░░░░░░░░░░░░░░░░ │
+                                               │                              │
+                                               │ Weekly · all models          │
+                                               │ Resets Fri 8:59 AM       18% │
+                                               │ ███░░░░░░░░░░░░░░░░░░░░░░░░░ │
+                                               │                              │
+                                               │ Weekly · Fable               │
+                                               │ Resets Fri 9:00 AM        0% │
+                                               │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
+                                               │ ──────────────────────────── │
+                                               │ Account: uncle9.ai@gmail.com │
+                                               │ Source:  web                 │
+                                               │ Updated: Just now            │
+                                               └──────────────────────────────┘
 ```
 
 ---
 
-## Why TokenBar?
+## The Concept
 
-The MacBook Pro notch makes having multiple separate menu-bar status items impractical. If you use Claude Code, Codex, Gemini CLI, Antigravity, Cursor, and GitHub Copilot simultaneously, individual menu-bar items quickly crowd out your status bar and disappear behind the notch.
+TokenBar is a **presentation extension of CodexBarMenuBar**, adding vertical multi-provider consolidation without destroying the original UX:
 
-**TokenBar solves this by maintaining a strict, constant footprint of exactly ONE menu-bar icon**, regardless of whether you have 3, 10, or 30 providers enabled:
+```
+Existing CodexBarMenuBar UX
+            +
+Optional single-icon vertical multi-provider view
+            =
+TokenBar
+```
 
-1. **One permanent entry point** in the macOS menu bar.
-2. **Vertical provider overview** showing identity and primary quota at a glance.
-3. **Native secondary detail panels** inspired by oMLX System Stats, revealed on hover/highlight with progress bars, reset countdowns, extra quota allowances, and account metadata.
-4. **Zero flicker, zero focus stealing, zero stranded windows** thanks to standard AppKit menu hierarchy.
+### 1. Presentation Modes
+
+- **Automatic (Default)**: Automatically preserves the classic horizontal merged layout when 1–3 providers are enabled, and cleanly consolidates into a single TokenBar icon when 4+ providers are enabled to avoid crowding the MacBook Pro notch.
+- **Horizontal / Original**: The authentic `CodexBarMenuBar` multi-item or merged horizontal status-bar layout.
+- **Vertical / Single Icon**: Exactly ONE compact icon in the menu bar with native vertical dropdown and secondary detail cards.
+
+### 2. Claude Code Behavioural Model
+
+Instead of confusing "remaining %", TokenBar adopts the Claude Code mental model:
+
+$$\text{Usage accumulated in the current window} + \text{Exactly when that window resets}$$
+
+- **Three instant answers**:
+  1. *“How much have I used?”* → Progress bar grows left-to-right from 0% toward 100% as quota is consumed.
+  2. *“When does it reset?”* → Prominently displayed deadline (`Resets in 25 min`, `Resets Fri 8:59 AM`).
+  3. *“Which quota window is this?”* → Clearly labeled window (`5-hour`, `Weekly · all models`, `Weekly · Fable`, `Gemini 5-hour`, etc.).
+- **Neutral and factual**: No artificial urgency, gamification, or glowing warnings.
 
 ---
 
 ## Features
 
-- **Constant Menu-Bar Footprint**: Uses only a single menu-bar item.
-- **Native macOS Hover Flyouts**: Hovering or highlighting any provider smoothly expands a native detail panel with quota progress bars.
-- **Multi-Window Quota Tracking**:
-  - Current / session window (e.g., 3-hour or 5-hour limit).
-  - Weekly window.
-  - Provider-specific extra allowances (e.g., Claude Opus carve-outs, Codex Code Review quotas).
-- **Automatic Configuration Migration**: Seamlessly detects and imports your enabled providers, custom ordering, and refresh cadence from existing `CodexBarMenuBar` and `CodexBar` setups on first launch.
-- **Truthful Degradation**: Never fabricates or guesses a quota. Unavailable metrics degrade gracefully to dashes or status badges.
-- **Instant Background Refresh**: Manual refresh via `⌘R` or customizable periodic refresh intervals (1m, 2m, 5m, 15m, 30m, Manual).
-- **Comprehensive Provider Support**: Works with all major AI coding platforms out of the box.
-- **Native SwiftUI + AppKit**: Built for macOS 14+ Sonoma and macOS 15+ Sequoia with full Dark Mode and Accessibility support.
+- **Upstream Asset & UI Fidelity**: Direct integration of upstream vector SVG icons, typography, spacing, and 3-tab Settings window (`General`, `Providers`, `About`).
+- **Zero-Setup Migration**: Seamlessly imports your preferences, provider order, refresh interval, and custom window settings directly from `com.lobo.CodexBarMenuBar.plist`.
+- **Parallel CLI Bridge**: Runs background queries concurrently across enabled providers via `codexbar usage --provider <id> --format json`.
+- **Native macOS Submenus**: Provider detail cards are accessible via standard macOS menu items—no floating HUDs or detached windows.
+- **All 48+ Providers Supported**: Claude, Codex, Gemini, Antigravity, Cursor, Copilot, DeepSeek, OpenRouter, Windsurf, Ollama, and more.
 
 ---
 
-## Supported Providers
+## Build & Installation
 
-| Provider | Primary Quota | Secondary Quota | Extra Windows / Features |
-| :--- | :--- | :--- | :--- |
-| **Claude** | 5-hour session | Weekly allowance | Opus model allowance, Web / OAuth |
-| **OpenAI / Codex** | Session limit | Weekly limit | Code review credits, GPT-4 allowances |
-| **Gemini** | Session quota | Daily / weekly | Google AI Studio & Vertex AI limits |
-| **Antigravity** | Session quota | Weekly budget | AGY SDK task allowances |
-| **Cursor** | Fast requests | Monthly pool | Pro / Business quota tiers |
-| **GitHub Copilot** | Premium requests | Monthly limit | Enterprise / Individual plans |
-| **Windsurf** | Session quota | Monthly grant | Cascade allowances |
-| **DeepSeek** | API balance | Usage credits | Real-time currency balance |
-| **OpenRouter** | Credit balance | Rate limits | Remaining balance |
-| **Others** | Session / Weekly | Varies | Qwen/Alibaba, Kimi, MiniMax, Kiro, ZAI, Droid |
+### Requirements
+- macOS 14.0+ (Sonoma or Sequoia)
+- Xcode 15+ command line tools
+- [CodexBar CLI](https://github.com/steipete/CodexBar) (`brew install codexbar` or manual install)
 
----
-
-## Architecture
-
-```
-┌────────────────────────────────────────────────────────┐
-│             AI Provider Data Layer                     │
-│  (CodexBar CLI / Providers / Local Session Probes)     │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼ JSON
-┌────────────────────────────────────────────────────────┐
-│                    TokenBarCore                        │
-│   • UsageSnapshot / RateWindow Data Models             │
-│   • UsageStore (@MainActor State Coordinator)          │
-│   • Background Refresh Timer & Coalescing              │
-└───────────────────────────┬────────────────────────────┘
-                            │
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│                      TokenBar                          │
-│   • Single NSStatusItem                                │
-│   • Root NSMenu (Vertical Provider Overview Rows)      │
-│   • Hover/Highlight Submenus (ProviderDetailCardView)  │
-│   • Settings & Preferences Window                      │
-└────────────────────────────────────────────────────────┘
-```
-
-TokenBar interfaces with the standardized `CodexBarResponse` and `UsageSnapshot` models. By leveraging the existing local `codexbar` provider infrastructure, TokenBar focuses on delivering an unparalleled macOS presentation layer with zero duplication of unstable scraping logic.
-
----
-
-## Installation
-
-### Prerequisites
-- macOS 14.0 or higher (Apple Silicon & Intel supported).
-- [CodexBar](https://github.com/steipete/CodexBar) CLI installed (`brew install steipete/tap/codexbar` or installed via CodexBar.app).
-
-### Build from Source
+### Build & Run
 ```bash
+# Clone the repository
 git clone https://github.com/uncle9x9/TokenBar.git
 cd TokenBar
 
-# Build release application bundle
-./Scripts/package_app.sh
+# Run tests
+make test
+
+# Verify live CLI queries
+make verify
+
+# Build and package TokenBar.app
+make package
 
 # Launch TokenBar
 open dist/TokenBar.app
@@ -122,40 +101,6 @@ open dist/TokenBar.app
 
 ---
 
-## Development
-
-```bash
-# Run unit tests
-make test
-
-# Build debug binary
-make build
-
-# Run acceptance verification suite
-make verify
-
-# Package release .app bundle
-make package
-```
-
----
-
-## Privacy & Security
-
-- **No Remote Telemetry**: TokenBar communicates exclusively with your local provider tools and APIs.
-- **On-Device Only**: Credentials and session tokens remain securely in your local macOS Keychain or configuration files.
-- **Open Source**: Complete transparency with clean, auditable Swift code.
-
----
-
-## Upstream Inspiration & Credits
-
-- **[CodexBar](https://github.com/steipete/CodexBar)** by Peter Steinberger (@steipete) — For pioneering the provider descriptors, fetching infrastructure, and shared usage models.
-- **[oMLX](https://github.com/jundot/omlx)** by Jun (@jundot) — For the inspiration behind native macOS hover detail flyouts (System Stats).
-- **[CodexBarMenuBar](https://github.com/Lobobodev/CodexBarMenuBar)** by Lobobodev — For demonstrating lightweight presentation layering over CodexBar data.
-
----
-
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+MIT License. Copyright © 2026 TokenBar Authors. Based on CodexBarMenuBar (© 2026 LoboAI, MIT) and CodexBar (© 2026 Peter Steinberger, MIT).
