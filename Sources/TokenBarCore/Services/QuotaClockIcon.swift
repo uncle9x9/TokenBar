@@ -57,14 +57,14 @@ public enum QuotaClockIcon {
                 path.stroke()
             }
             // The subdued track keeps the clock silhouette recognisable near reset.
-            arc(start: 87, end: -267, color: foreground.withAlphaComponent(0.20))
+            arc(start: 80, end: -260, color: foreground.withAlphaComponent(0.20))
             if let steps = state.remainingSteps {
                 if steps > 0 {
-                    let elapsed = CGFloat(60 - steps) * 6
-                    arc(start: 87 - elapsed, end: -267, color: foreground)
+                    let elapsed = CGFloat(60 - steps) * (340.0 / 60)
+                    arc(start: 80 - elapsed, end: -260, color: foreground)
                 }
             } else {
-                arc(start: 87, end: -267, color: foreground.withAlphaComponent(0.65), dashed: true)
+                arc(start: 80, end: -260, color: foreground.withAlphaComponent(0.65), dashed: true)
             }
 
             let barRect = NSRect(x: center.x - 4.6 * scale, y: center.y - 1.55 * scale,

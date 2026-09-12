@@ -53,6 +53,12 @@ final class QuotaClockIconTests: XCTestCase {
         XCTAssertNil(QuotaClockState(usage: data, windowID: "weekly", now: now).usedFraction)
     }
 
+    func testFinalCountdownStepStillDrawsAnArc() {
+        let finalStep = QuotaClockIcon.render(state: QuotaClockState(usage: usage(remaining: 1), now: now))
+        let elapsed = QuotaClockIcon.render(state: QuotaClockState(usage: usage(remaining: 0), now: now))
+        XCTAssertNotEqual(finalStep.tiffRepresentation, elapsed.tiffRepresentation)
+    }
+
     func testTemplateAndExhaustionRendering() {
         let normal = QuotaClockIcon.render(state: QuotaClockState(usage: usage(), now: now))
         XCTAssertTrue(normal.isTemplate)

@@ -23,17 +23,34 @@ public enum CLIBridgeError: Error, LocalizedError {
 public actor CodexBarCLIBridge {
     public static let shared = CodexBarCLIBridge()
 
-    private let binaryCandidates: [String] = [
+    private static let binaryCandidates: [String] = [
         "/opt/homebrew/bin/codexbar",
         "/usr/local/bin/codexbar",
         "/Applications/CodexBar.app/Contents/MacOS/CodexBarCLI"
     ]
 
-    public var resolvedPath: String? {
-        binaryCandidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+    public nonisolated var resolvedPath: String? {
+        Self.binaryCandidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     public init() {}
+
+    /// Runs codexbar --version and returns the detected CLI version string.
+    public func fetchVersion(timeoutSeconds: TimeInterval = 3.0) async -> String? {
+        guard let path = resolvedPath else { return nil }
+        do {
+            let data = try await runProcess(executablePath: path, arguments: ["--version"], timeout: timeoutSeconds)
+            guard let raw = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+                return nil
+            }
+            if let last = raw.split(separator: " ").last {
+                return String(last)
+            }
+            return raw
+        } catch {
+            return nil
+        }
+    }
 
     /// Runs codexbar CLI and returns decoded responses for all or specific provider.
     public func fetchUsage(provider: String? = nil, timeoutSeconds: TimeInterval = 15.0) async throws -> [CodexBarResponse] {

@@ -959,10 +959,19 @@ public struct ProviderDetailView: View {
 
 public struct AboutSettingsView: View {
     @State private var iconHover = false
+    @State private var detectedCLIVersion: String?
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.32.4"
+    }
 
     private var appIcon: NSImage {
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
            let image = NSImage(contentsOf: url) {
+            return image
+        }
+        if let path = Bundle.main.path(forResource: "TokenBar", ofType: "icns"),
+           let image = NSImage(contentsOfFile: path) {
             return image
         }
         return NSApplication.shared.applicationIconImage
@@ -982,21 +991,25 @@ public struct AboutSettingsView: View {
                     }
                 }
 
-            VStack(spacing: 2) {
+            VStack(spacing: 3) {
                 Text("TokenBar")
                     .font(.title3)
                     .bold()
-                Text("Version 1.0.0")
+                Text("Version \(appVersion)")
                     .foregroundStyle(.secondary)
+                Text("Tracking CodexBarMenuBar v0.32.4 · CodexBar CLI \(detectedCLIVersion.map { "v\($0)" } ?? "v0.60.0")")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
                 Text("Presentation extension for CodexBarMenuBar")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .padding(.top, 2)
             }
 
             VStack(alignment: .center, spacing: 8) {
                 Link("View TokenBar on GitHub", destination: URL(string: "https://github.com/uncle9x9/TokenBar")!)
-                Link("CodexBarMenuBar Upstream", destination: URL(string: "https://github.com/Lobobodev/CodexBarMenuBar")!)
-                Link("Powered by CodexBar CLI", destination: URL(string: "https://github.com/steipete/CodexBar")!)
+                Link("CodexBarMenuBar Upstream (v0.32.4)", destination: URL(string: "https://github.com/Lobobodev/CodexBarMenuBar")!)
+                Link("Powered by CodexBar CLI \(detectedCLIVersion.map { "(v\($0))" } ?? "(v0.60.0)")", destination: URL(string: "https://github.com/steipete/CodexBar")!)
             }
             .font(.footnote)
             .padding(.top, 8)
@@ -1006,7 +1019,7 @@ public struct AboutSettingsView: View {
             VStack(spacing: 4) {
                 Text("Data source")
                     .font(.footnote.weight(.semibold))
-                Text("/opt/homebrew/bin/codexbar")
+                Text(CodexBarCLIBridge.shared.resolvedPath ?? "/opt/homebrew/bin/codexbar")
                     .font(.footnote)
                     .monospaced()
                     .foregroundStyle(.secondary)
@@ -1023,6 +1036,9 @@ public struct AboutSettingsView: View {
         .padding(.top, 12)
         .padding(.horizontal, 24)
         .padding(.bottom, 24)
+        .task {
+            detectedCLIVersion = await CodexBarCLIBridge.shared.fetchVersion()
+        }
     }
 }
 
