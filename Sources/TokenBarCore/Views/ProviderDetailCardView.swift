@@ -218,11 +218,14 @@ public struct ProviderDetailCardView: View {
     // MARK: - Metadata Rows
     private var metadataSection: some View {
         VStack(alignment: .leading, spacing: 5) {
-            // Reset countdown
+            // Reset countdown or absolute description
             if let resetDate = usage.primaryResetsAt {
+                let resetText = UsageStore.shared.resetTimeAsAbsolute
+                    ? ResetTimeFormatter.absoluteDescription(from: resetDate)
+                    : ResetTimeFormatter.countdownDescription(from: resetDate)
                 metaKeyValueRow(
                     label: "Reset",
-                    value: ResetTimeFormatter.countdownDescription(from: resetDate)
+                    value: resetText
                 )
             }
 

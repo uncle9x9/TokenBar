@@ -47,6 +47,7 @@ The MacBook Pro notch makes having multiple separate menu-bar status items impra
   - Current / session window (e.g., 3-hour or 5-hour limit).
   - Weekly window.
   - Provider-specific extra allowances (e.g., Claude Opus carve-outs, Codex Code Review quotas).
+- **Automatic Configuration Migration**: Seamlessly detects and imports your enabled providers, custom ordering, and refresh cadence from existing `CodexBarMenuBar` and `CodexBar` setups on first launch.
 - **Truthful Degradation**: Never fabricates or guesses a quota. Unavailable metrics degrade gracefully to dashes or status badges.
 - **Instant Background Refresh**: Manual refresh via `⌘R` or customizable periodic refresh intervals (1m, 2m, 5m, 15m, 30m, Manual).
 - **Comprehensive Provider Support**: Works with all major AI coding platforms out of the box.

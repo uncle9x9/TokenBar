@@ -7,11 +7,19 @@ public final class UsageStore {
     public static let shared = UsageStore()
 
     public var usages: [String: ProviderUsage] = [:]
+
     public var enabledProviderIDs: [String] = [] {
         didSet {
             UserDefaults.standard.set(enabledProviderIDs, forKey: "tokenbar_enabled_provider_ids")
         }
     }
+
+    public var providerOrder: [String] = [] {
+        didSet {
+            UserDefaults.standard.set(providerOrder, forKey: "tokenbar_provider_order")
+        }
+    }
+
     public var refreshInterval: TimeInterval = 120.0 {
         didSet {
             UserDefaults.standard.set(refreshInterval, forKey: "tokenbar_refresh_interval")
@@ -19,23 +27,45 @@ public final class UsageStore {
         }
     }
 
+    public var resetTimeAsAbsolute: Bool = false {
+        didSet {
+            UserDefaults.standard.set(resetTimeAsAbsolute, forKey: "tokenbar_reset_as_absolute")
+        }
+    }
+
     public var isRefreshing: Bool = false
     public var lastRefreshTime: Date?
     public var lastError: String?
+    public var lastMigrationResult: MigrationResult?
 
     private var timerTask: Task<Void, Never>?
     private let cliBridge = CodexBarCLIBridge.shared
 
     public init() {
+        let hasMigrated = UserDefaults.standard.bool(forKey: "tokenbar_migration_completed")
+
         if let saved = UserDefaults.standard.stringArray(forKey: "tokenbar_enabled_provider_ids"), !saved.isEmpty {
             self.enabledProviderIDs = saved
         } else {
             self.enabledProviderIDs = ProviderConfig.defaultEnabledIDs
         }
 
+        if let savedOrder = UserDefaults.standard.stringArray(forKey: "tokenbar_provider_order"), !savedOrder.isEmpty {
+            self.providerOrder = savedOrder
+        } else {
+            self.providerOrder = ProviderConfig.allProviders.map(\.id)
+        }
+
         let savedInterval = UserDefaults.standard.double(forKey: "tokenbar_refresh_interval")
         if savedInterval > 0 {
             self.refreshInterval = savedInterval
+        }
+
+        self.resetTimeAsAbsolute = UserDefaults.standard.bool(forKey: "tokenbar_reset_as_absolute")
+
+        // First launch auto-migration from previous CodexBarMenuBar if available
+        if !hasMigrated {
+            checkAndRunFirstLaunchMigration()
         }
 
         // Initialize empty records for enabled providers
@@ -46,9 +76,74 @@ public final class UsageStore {
         }
     }
 
+    /// Automatically migrates settings from previous CodexBarMenuBar installation if present.
+    public func checkAndRunFirstLaunchMigration() {
+        if let result = ConfigurationMigrator.performMigration() {
+            applyMigrationResult(result)
+            UserDefaults.standard.set(true, forKey: "tokenbar_migration_completed")
+            UserDefaults.standard.set(result.source, forKey: "tokenbar_migration_source")
+        }
+    }
+
+    /// Manually triggers migration from previous CodexBarMenuBar configuration.
+    @discardableResult
+    public func migrateFromPreviousConfig() -> MigrationResult? {
+        guard let result = ConfigurationMigrator.performMigration() else { return nil }
+        applyMigrationResult(result)
+        UserDefaults.standard.set(true, forKey: "tokenbar_migration_completed")
+        UserDefaults.standard.set(result.source, forKey: "tokenbar_migration_source")
+        return result
+    }
+
+    private func applyMigrationResult(_ result: MigrationResult) {
+        self.lastMigrationResult = result
+
+        // Filter valid known provider IDs
+        let validIDs = result.enabledProviderIDs.filter { ProviderConfig.byID[$0] != nil }
+        if !validIDs.isEmpty {
+            self.enabledProviderIDs = validIDs
+        }
+
+        if !result.providerOrder.isEmpty {
+            self.providerOrder = result.providerOrder.filter { ProviderConfig.byID[$0] != nil }
+        }
+
+        if let interval = result.refreshInterval, interval > 0 {
+            self.refreshInterval = interval
+        }
+
+        if let absolute = result.resetTimeAsAbsolute {
+            self.resetTimeAsAbsolute = absolute
+        }
+
+        for id in enabledProviderIDs {
+            if self.usages[id] == nil, let config = ProviderConfig.byID[id] {
+                self.usages[id] = ProviderUsage.empty(config: config)
+            }
+        }
+    }
+
+    /// Returns enabled configs ordered according to providerOrder, with any remaining at the end.
     public var enabledConfigs: [ProviderConfig] {
-        let set = Set(enabledProviderIDs)
-        return ProviderConfig.allProviders.filter { set.contains($0.id) }
+        let enabled = Set(enabledProviderIDs)
+        var configs: [ProviderConfig] = []
+        var added = Set<String>()
+
+        for id in providerOrder {
+            if enabled.contains(id), let config = ProviderConfig.byID[id], !added.contains(id) {
+                configs.append(config)
+                added.insert(id)
+            }
+        }
+
+        for id in enabledProviderIDs {
+            if !added.contains(id), let config = ProviderConfig.byID[id] {
+                configs.append(config)
+                added.insert(id)
+            }
+        }
+
+        return configs
     }
 
     public func usage(for id: String) -> ProviderUsage {
