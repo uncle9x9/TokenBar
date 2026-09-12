@@ -45,7 +45,7 @@ final class ResetTimeFormatterTests: XCTestCase {
 
         let claudeWindows = claudeUsage.normalisedQuotaWindows(config: claudeConfig)
         XCTAssertEqual(claudeWindows.count, 3)
-        XCTAssertEqual(claudeWindows[0].title, "5-hour")
+        XCTAssertEqual(claudeWindows[0].title, "5-hour limit")
         XCTAssertEqual(claudeWindows[0].usedPercent, 20.0)
         XCTAssertEqual(claudeWindows[0].resetText, "Resets in 31 min")
 
@@ -83,10 +83,10 @@ final class ResetTimeFormatterTests: XCTestCase {
         XCTAssertEqual(ResetTimeFormatter.countdownDescription(from: soon, now: now), "now")
 
         let in45m = now.addingTimeInterval(45 * 60)
-        XCTAssertEqual(ResetTimeFormatter.countdownDescription(from: in45m, now: now), "45m")
+        XCTAssertEqual(ResetTimeFormatter.countdownDescription(from: in45m, now: now), "45 min")
 
         let in2h15m = now.addingTimeInterval(2 * 3600 + 15 * 60)
-        XCTAssertEqual(ResetTimeFormatter.countdownDescription(from: in2h15m, now: now), "2h 15m")
+        XCTAssertEqual(ResetTimeFormatter.countdownDescription(from: in2h15m, now: now), "2 hr 15 min")
 
         let in2d13h = now.addingTimeInterval(2 * 86400 + 13 * 3600)
         XCTAssertEqual(ResetTimeFormatter.countdownDescription(from: in2d13h, now: now), "2d 13h")

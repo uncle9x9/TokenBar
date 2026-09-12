@@ -248,26 +248,26 @@ public struct ConsolidatedQuotaPanelView: View {
     private func quotaWindowRow(_ window: QuotaWindowItem) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
-                // Window Title
+                // Window Title (Left)
                 Text(window.title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 105, alignment: .leading)
-
-                // Consumed percentage
-                Text("\(Int(window.usedPercent))% used")
-                    .font(.system(size: 11, weight: .semibold))
-                    .monospacedDigit()
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.primary)
 
-                Spacer()
+                Spacer(minLength: 8)
 
-                // Prominent Reset Deadline
+                // Prominent Reset Deadline (Right)
                 if let resetText = window.resetText {
                     Text(resetText)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 11, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
+
+                // Consumed percentage (Far right, matching Claude Code)
+                Text("\(Int(window.usedPercent))%")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+                    .frame(minWidth: 32, alignment: .trailing)
             }
 
             // Quota progress bar: grows 0% -> 100% as consumed (Claude Code model)

@@ -31,8 +31,9 @@ public struct QuotaClockState: Equatable, Sendable {
         let usage = "\(provider) · \(window): \(Int((usedFraction * 100).rounded()))% used"
         if awaitingReset { return usage + " · awaiting reset update" }
         if let resetsAt {
-            let minutes = max(1, Int(ceil(resetsAt.timeIntervalSince(now) / 60)))
-            return usage + " · resets in \(minutes / 60)h \(minutes % 60)m"
+            if let line = ResetTimeFormatter.resetLine(date: resetsAt, now: now) {
+                return usage + " · \(line)"
+            }
         }
         return usage + " · reset time unavailable"
     }

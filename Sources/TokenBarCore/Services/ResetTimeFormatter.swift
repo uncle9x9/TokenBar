@@ -71,9 +71,9 @@ public enum ResetTimeFormatter {
             return hours > 0 ? "\(days)d \(hours)h" : "\(days)d"
         }
         if hours > 0 {
-            return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h"
+            return minutes > 0 ? "\(hours) hr \(minutes) min" : "\(hours) hr"
         }
-        return "\(totalMinutes)m"
+        return "\(totalMinutes) min"
     }
 
     public static func absoluteDescription(from date: Date, now: Date = Date()) -> String {

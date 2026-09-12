@@ -155,7 +155,9 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
 
         if let s = sessionPercent {
             let label: String
-            if config.id == "claude" || sessionWindowMinutes == 300 {
+            if config.id == "claude" {
+                label = "5-hour limit"
+            } else if sessionWindowMinutes == 300 {
                 label = "5-hour"
             } else if config.id == "grok" {
                 if let resetsAt = sessionResetsAt {
