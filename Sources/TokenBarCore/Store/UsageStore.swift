@@ -185,49 +185,36 @@ public final class UsageStore {
         defer {
             isRefreshing = false
             lastRefreshTime = Date()
+            StatusItemController.shared.rebuildMenu()
         }
 
         let configs = enabledConfigs
         guard !configs.isEmpty else { return }
 
-        // First attempt: try single bulk CLI fetch
-        do {
-            let responses = try await cliBridge.fetchUsage(provider: nil, timeoutSeconds: 20.0)
-            let responseMap = Dictionary(grouping: responses, by: \.provider)
-
+        await withTaskGroup(of: (String, Result<CodexBarResponse, Error>).self) { group in
             for config in configs {
-                if let matching = responseMap[config.cliName]?.first ?? responseMap[config.id]?.first {
-                    self.usages[config.id] = CodexBarCLIBridge.mapResponseToUsage(matching, config: config)
+                group.addTask {
+                    do {
+                        let results = try await self.cliBridge.fetchUsage(provider: config.cliName, timeoutSeconds: 15.0)
+                        if let first = results.first {
+                            return (config.id, .success(first))
+                        }
+                        throw CLIBridgeError.executionFailed("Empty response from codexbar")
+                    } catch {
+                        return (config.id, .failure(error))
+                    }
                 }
             }
-            return
-        } catch {
-            // Bulk fetch failed or unsupported; fall back to parallel per-provider fetch
-            await withTaskGroup(of: (String, Result<CodexBarResponse, Error>).self) { group in
-                for config in configs {
-                    group.addTask {
-                        do {
-                            let results = try await self.cliBridge.fetchUsage(provider: config.cliName, timeoutSeconds: 10.0)
-                            if let first = results.first {
-                                return (config.id, .success(first))
-                            }
-                            throw CLIBridgeError.executionFailed("Empty response")
-                        } catch {
-                            return (config.id, .failure(error))
-                        }
-                    }
-                }
 
-                for await (id, result) in group {
-                    guard let config = ProviderConfig.byID[id] else { continue }
-                    switch result {
-                    case .success(let response):
-                        self.usages[id] = CodexBarCLIBridge.mapResponseToUsage(response, config: config)
-                    case .failure(let err):
-                        var existing = self.usages[id] ?? ProviderUsage.empty(config: config)
-                        existing.error = err.localizedDescription
-                        self.usages[id] = existing
-                    }
+            for await (id, result) in group {
+                guard let config = ProviderConfig.byID[id] else { continue }
+                switch result {
+                case .success(let response):
+                    self.usages[id] = CodexBarCLIBridge.mapResponseToUsage(response, config: config)
+                case .failure(let err):
+                    var existing = self.usages[id] ?? ProviderUsage.empty(config: config)
+                    existing.error = err.localizedDescription
+                    self.usages[id] = existing
                 }
             }
         }
@@ -235,6 +222,9 @@ public final class UsageStore {
 
     public func refreshProvider(id: String) async {
         guard let config = ProviderConfig.byID[id] else { return }
+        defer {
+            StatusItemController.shared.rebuildMenu()
+        }
         do {
             let results = try await cliBridge.fetchUsage(provider: config.cliName, timeoutSeconds: 10.0)
             if let first = results.first {
