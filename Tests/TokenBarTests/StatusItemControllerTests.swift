@@ -227,4 +227,60 @@ final class StatusItemControllerTests: XCTestCase {
 
         XCTAssertGreaterThan(imageWithOverflow.size.width, imageWithoutOverflow.size.width, "Overflow badge +1 must add width to status item image")
     }
+
+    func testContextMenuStructureAndActionHandling() {
+        let store = UsageStore.shared
+        store.seedSampleData()
+        let controller = StatusItemController.shared
+        controller.setup()
+
+        let menu = controller.buildContextMenu()
+        let itemTitles = menu.items.map(\.title)
+
+        XCTAssertTrue(itemTitles.contains("Open Quota Panel"), "Menu should have Open Quota Panel when closed")
+        XCTAssertTrue(itemTitles.contains(where: { $0.hasPrefix("Refresh") }), "Menu should have Refresh item")
+        XCTAssertTrue(itemTitles.contains("Presentation Mode"), "Menu should contain Presentation Mode submenu")
+        XCTAssertTrue(itemTitles.contains("Reset Time Format"), "Menu should contain Reset Time Format submenu")
+        XCTAssertTrue(itemTitles.contains("Settings…"), "Menu should contain Settings")
+        XCTAssertTrue(itemTitles.contains("Quit TokenBar"), "Menu should contain Quit")
+
+        // Check Presentation Mode submenu
+        let presentationItem = menu.items.first(where: { $0.title == "Presentation Mode" })
+        XCTAssertNotNil(presentationItem?.submenu)
+        let presentationSubTitles = presentationItem?.submenu?.items.map(\.title) ?? []
+        XCTAssertTrue(presentationSubTitles.contains(where: { $0.hasPrefix("Automatic") }))
+        XCTAssertTrue(presentationSubTitles.contains(where: { $0.hasPrefix("Hybrid") }))
+        XCTAssertTrue(presentationSubTitles.contains(where: { $0.hasPrefix("Horizontal") }))
+        XCTAssertTrue(presentationSubTitles.contains(where: { $0.hasPrefix("Vertical") }))
+
+        // Test presentation mode action switching
+        controller.setPresentationHybrid()
+        XCTAssertEqual(store.presentation, .hybrid)
+        controller.setPresentationHorizontal()
+        XCTAssertEqual(store.presentation, .horizontal)
+        controller.setPresentationVertical()
+        XCTAssertEqual(store.presentation, .vertical)
+        controller.setPresentationAutomatic()
+        XCTAssertEqual(store.presentation, .automatic)
+
+        // Check Reset Time Format submenu
+        let resetTimeItem = menu.items.first(where: { $0.title == "Reset Time Format" })
+        XCTAssertNotNil(resetTimeItem?.submenu)
+        let resetSubTitles = resetTimeItem?.submenu?.items.map(\.title) ?? []
+        XCTAssertTrue(resetSubTitles.contains("Always Countdown 5-Hour Limits"))
+        XCTAssertTrue(resetSubTitles.contains("Show Clock Values (e.g. 9:00 AM)"))
+
+        // Test toggle actions
+        let prev5h = store.countdownForFiveHourLimits
+        controller.toggleCountdownForFiveHourLimits()
+        XCTAssertEqual(store.countdownForFiveHourLimits, !prev5h)
+        controller.toggleCountdownForFiveHourLimits()
+        XCTAssertEqual(store.countdownForFiveHourLimits, prev5h)
+
+        let prevAbs = store.resetTimeAsAbsolute
+        controller.toggleResetTimeAsAbsolute()
+        XCTAssertEqual(store.resetTimeAsAbsolute, !prevAbs)
+        controller.toggleResetTimeAsAbsolute()
+        XCTAssertEqual(store.resetTimeAsAbsolute, prevAbs)
+    }
 }

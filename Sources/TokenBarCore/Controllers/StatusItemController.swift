@@ -381,9 +381,21 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         }
     }
 
-    private func showContextMenu(from button: NSStatusBarButton, with event: NSEvent) {
+    public func buildContextMenu() -> NSMenu {
         let menu = NSMenu()
 
+        // 1. Quota Panel Toggle
+        let isShown = popover?.isShown ?? false
+        let panelTitle = isShown ? "Close Quota Panel" : "Open Quota Panel"
+        let panelItem = NSMenuItem(
+            title: panelTitle,
+            action: #selector(togglePanelClicked),
+            keyEquivalent: ""
+        )
+        panelItem.target = self
+        menu.addItem(panelItem)
+
+        // 2. Refresh All
         let refreshItem = NSMenuItem(
             title: store.isRefreshing ? "Refreshing Providers…" : "Refresh All",
             action: #selector(refreshAllClicked),
@@ -393,6 +405,79 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         refreshItem.isEnabled = !store.isRefreshing
         menu.addItem(refreshItem)
 
+        menu.addItem(.separator())
+
+        // 3. Presentation Mode Submenu
+        let presentationMenu = NSMenu(title: "Presentation Mode")
+
+        let autoItem = NSMenuItem(
+            title: "Automatic (1–3 Horizontal, 4+ Single Icon)",
+            action: #selector(setPresentationAutomatic),
+            keyEquivalent: ""
+        )
+        autoItem.target = self
+        autoItem.state = (store.presentation == .automatic) ? .on : .off
+        presentationMenu.addItem(autoItem)
+
+        let hybridItem = NSMenuItem(
+            title: "Hybrid / Overflow (Keep 1–3 in Menu Bar, Hover for All)",
+            action: #selector(setPresentationHybrid),
+            keyEquivalent: ""
+        )
+        hybridItem.target = self
+        hybridItem.state = (store.presentation == .hybrid) ? .on : .off
+        presentationMenu.addItem(hybridItem)
+
+        let horizontalItem = NSMenuItem(
+            title: "Horizontal / Original (Classic CodexBarMenuBar)",
+            action: #selector(setPresentationHorizontal),
+            keyEquivalent: ""
+        )
+        horizontalItem.target = self
+        horizontalItem.state = (store.presentation == .horizontal) ? .on : .off
+        presentationMenu.addItem(horizontalItem)
+
+        let verticalItem = NSMenuItem(
+            title: "Vertical / Single Icon",
+            action: #selector(setPresentationVertical),
+            keyEquivalent: ""
+        )
+        verticalItem.target = self
+        verticalItem.state = (store.presentation == .vertical) ? .on : .off
+        presentationMenu.addItem(verticalItem)
+
+        let presentationParent = NSMenuItem(title: "Presentation Mode", action: nil, keyEquivalent: "")
+        presentationParent.submenu = presentationMenu
+        menu.addItem(presentationParent)
+
+        // 4. Reset Time Format Submenu
+        let resetTimeMenu = NSMenu(title: "Reset Time Format")
+
+        let countdown5hItem = NSMenuItem(
+            title: "Always Countdown 5-Hour Limits",
+            action: #selector(toggleCountdownForFiveHourLimits),
+            keyEquivalent: ""
+        )
+        countdown5hItem.target = self
+        countdown5hItem.state = store.countdownForFiveHourLimits ? .on : .off
+        resetTimeMenu.addItem(countdown5hItem)
+
+        let absoluteResetItem = NSMenuItem(
+            title: "Show Clock Values (e.g. 9:00 AM)",
+            action: #selector(toggleResetTimeAsAbsolute),
+            keyEquivalent: ""
+        )
+        absoluteResetItem.target = self
+        absoluteResetItem.state = store.resetTimeAsAbsolute ? .on : .off
+        resetTimeMenu.addItem(absoluteResetItem)
+
+        let resetTimeParent = NSMenuItem(title: "Reset Time Format", action: nil, keyEquivalent: "")
+        resetTimeParent.submenu = resetTimeMenu
+        menu.addItem(resetTimeParent)
+
+        menu.addItem(.separator())
+
+        // 5. Settings…
         let settingsItem = NSMenuItem(
             title: "Settings…",
             action: #selector(openSettingsClicked),
@@ -403,6 +488,7 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
 
         menu.addItem(.separator())
 
+        // 6. Quit TokenBar
         let quitItem = NSMenuItem(
             title: "Quit TokenBar",
             action: #selector(quitClicked),
@@ -411,6 +497,11 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         quitItem.target = self
         menu.addItem(quitItem)
 
+        return menu
+    }
+
+    private func showContextMenu(from button: NSStatusBarButton, with event: NSEvent) {
+        let menu = buildContextMenu()
         NSMenu.popUpContextMenu(menu, with: event, for: button)
     }
 
@@ -487,6 +578,44 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     // MARK: - Actions
+
+    @objc public func togglePanelClicked() {
+        if let pop = popover, pop.isShown {
+            hideConsolidatedPanel(force: true)
+        } else {
+            showConsolidatedPanel(pinned: true)
+        }
+    }
+
+    @objc public func setPresentationAutomatic() {
+        store.presentation = .automatic
+        updateDisplay()
+    }
+
+    @objc public func setPresentationHybrid() {
+        store.presentation = .hybrid
+        updateDisplay()
+    }
+
+    @objc public func setPresentationHorizontal() {
+        store.presentation = .horizontal
+        updateDisplay()
+    }
+
+    @objc public func setPresentationVertical() {
+        store.presentation = .vertical
+        updateDisplay()
+    }
+
+    @objc public func toggleCountdownForFiveHourLimits() {
+        store.countdownForFiveHourLimits.toggle()
+        updateDisplay()
+    }
+
+    @objc public func toggleResetTimeAsAbsolute() {
+        store.resetTimeAsAbsolute.toggle()
+        updateDisplay()
+    }
 
     @objc public func refreshAllClicked() {
         Task {
