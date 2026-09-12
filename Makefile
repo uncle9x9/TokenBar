@@ -7,7 +7,7 @@ export DEVELOPER_DIR
 export TMPDIR
 export CLANG_MODULE_CACHE_PATH
 
-.PHONY: all build test verify package run clean
+.PHONY: all build test verify package dmg run clean
 
 all: test package
 
@@ -25,6 +25,9 @@ verify:
 
 package:
 	@./Scripts/package_app.sh
+
+dmg: package
+	@./Scripts/create_dmg.sh
 
 run: package
 	@open dist/TokenBar.app

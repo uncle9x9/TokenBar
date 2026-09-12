@@ -6,6 +6,15 @@ TokenBar brings unified, glanceable visibility to all your AI coding assistant q
 
 <img width="559" height="695" alt="image" src="https://github.com/user-attachments/assets/ba772d47-8f06-4c3b-b07c-0645f7c80ede" />
 
+<p align="center">
+  <a href="#core-design-principles">Design Principles</a> •
+  <a href="#menu-bar-presentation-modes">Presentation Modes</a> •
+  <a href="#the-dynamic-quota-clock">Quota Clock</a> •
+  <a href="#status-bar-context-menu">Context Menu</a> •
+  <a href="#download--installation">Download & Install</a> •
+  <a href="#license">License</a>
+</p>
+
 ---
 
 ## Core Design Principles
@@ -67,6 +76,27 @@ TokenBar automatically parses and normalizes complex upstream rate-limit schemas
 
 Right-click (or Control-click) the menu-bar item anytime for direct control:
 
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Open Quota Panel                                             │
+│ Refresh All                                               ⌘R │
+├──────────────────────────────────────────────────────────────┤
+│ Presentation Mode                                          ▸ │
+│   ✓ Automatic (1–3 Horizontal, 4+ Single Icon)               │
+│     Hybrid / Overflow (Keep 1–3 in Menu Bar, Hover for All)  │
+│     Horizontal / Original (Classic CodexBarMenuBar)          │
+│     Vertical / Single Icon                                   │
+├──────────────────────────────────────────────────────────────┤
+│ Reset Time Format                                          ▸ │
+│   ✓ Always Countdown 5-Hour Limits                           │
+│     Show Clock Values (e.g. 9:00 AM)                         │
+├──────────────────────────────────────────────────────────────┤
+│ Settings…                                                 ⌘, │
+├──────────────────────────────────────────────────────────────┤
+│ Quit TokenBar                                             ⌘Q │
+└──────────────────────────────────────────────────────────────┘
+```
+
 - **Open / Close Quota Panel**: Quick toggle without requiring mouse hover.
 - **Refresh All** (`⌘R`): Trigger concurrent CLI queries across all enabled providers.
 - **Presentation Mode ▸**: Instantly switch between Automatic, Hybrid, Horizontal, and Vertical modes.
@@ -86,14 +116,25 @@ If you already use `CodexBarMenuBar`, TokenBar automatically detects and imports
 
 ---
 
-## Build & Installation
+## Download & Installation
 
-### Prerequisites
+### Option 1: Direct Download (DMG)
+
+Pre-built release disk images are available for macOS 14.0+ (Apple Silicon):
+
+1. Download **[TokenBar-0.32.4.dmg](https://github.com/uncle9x9/TokenBar/releases/latest/download/TokenBar-0.32.4.dmg)** from the [Releases](https://github.com/uncle9x9/TokenBar/releases) page.
+2. Open the DMG disk image.
+3. Drag **TokenBar** into **Applications**.
+4. Launch **TokenBar** from Applications or Spotlight.
+
+### Option 2: Build from Source
+
+#### Prerequisites
 - macOS 14.0+ (Sonoma or Sequoia)
 - Xcode 15+ command line tools
 - [CodexBar CLI](https://github.com/steipete/CodexBar) installed (`brew install steipete/tap/codexbar` or placed in `~/.local/bin` / `/usr/local/bin` / `/opt/homebrew/bin`)
 
-### Commands
+#### Commands
 
 ```bash
 # Clone the repository
@@ -106,8 +147,11 @@ make test
 # Verify live CLI query bridge against installed providers
 make verify
 
-# Build and package the release application bundle
+# Build and package the release application bundle (.app)
 make package
+
+# Build the distributable DMG installer (.dmg)
+make dmg
 
 # Launch TokenBar
 open dist/TokenBar.app

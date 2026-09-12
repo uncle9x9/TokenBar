@@ -69,4 +69,7 @@ cat > "$CONTENTS_DIR/Info.plist" << 'PLIST_EOF'
 </plist>
 PLIST_EOF
 
+echo "==> Signing TokenBar.app (ad-hoc)..."
+codesign -s - --force --deep "$APP_DIR"
+
 echo "==> TokenBar.app successfully packaged at: $APP_DIR"
