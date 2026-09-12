@@ -49,6 +49,9 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
     public var weeklyPercent: Double?
     public var weeklyWindowMinutes: Int?
     public var weeklyResetsAt: Date?
+    public var tertiaryPercent: Double?
+    public var tertiaryWindowMinutes: Int?
+    public var tertiaryResetsAt: Date?
     public var extraWindows: [ExtraWindowUsage] = []
     public var balance: String?
     public var accountEmail: String?
@@ -67,6 +70,9 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
         weeklyPercent: Double? = nil,
         weeklyWindowMinutes: Int? = nil,
         weeklyResetsAt: Date? = nil,
+        tertiaryPercent: Double? = nil,
+        tertiaryWindowMinutes: Int? = nil,
+        tertiaryResetsAt: Date? = nil,
         extraWindows: [ExtraWindowUsage] = [],
         balance: String? = nil,
         accountEmail: String? = nil,
@@ -84,6 +90,9 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
         self.weeklyPercent = weeklyPercent
         self.weeklyWindowMinutes = weeklyWindowMinutes
         self.weeklyResetsAt = weeklyResetsAt
+        self.tertiaryPercent = tertiaryPercent
+        self.tertiaryWindowMinutes = tertiaryWindowMinutes
+        self.tertiaryResetsAt = tertiaryResetsAt
         self.extraWindows = extraWindows
         self.balance = balance
         self.accountEmail = accountEmail
@@ -106,6 +115,11 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
 
     public var primaryResetsAt: Date? {
         sessionResetsAt ?? weeklyResetsAt
+    }
+
+    /// Returns the primary quota window item for compact menu-bar presentation.
+    public func primaryQuotaWindow(config: ProviderConfig, asAbsolute: Bool = false) -> QuotaWindowItem? {
+        normalisedQuotaWindows(config: config, asAbsolute: asAbsolute).first
     }
 
     public var isConnected: Bool {
@@ -135,12 +149,17 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
         ProviderUsage(id: config.id, displayName: config.displayName)
     }
 
-    /// Normalises quota windows across all providers into the Claude Code behavioural model:
-    /// Window / scope, reset time, and consumed percentage.
+    /// Generates normalised quota windows following the modern multi-window provider models:
+    /// - Claude: 5-hour limit, Weekly · all models, Weekly · Fable
+    /// - Cursor: Total, Cursor, Third Party, Grok Bot
+    /// - Antigrav: Gemini 5-hour, Gemini weekly, Claude/GPT 5-hour, Claude/GPT weekly
+    /// - Codex: 5-hour, Weekly, gpt-reserve
+    /// - Grok: Weekly / Monthly, On-demand
     public func normalisedQuotaWindows(config: ProviderConfig, asAbsolute: Bool = false) -> [QuotaWindowItem] {
         var items: [QuotaWindowItem] = []
 
-        if config.id == "antigravity" && !extraWindows.isEmpty {
+        // If provider specifies rich explicit extra windows covering all its quota (like Antigravity), prefer them
+        if config.id == "antigravity", !extraWindows.isEmpty {
             for extra in extraWindows {
                 items.append(QuotaWindowItem(
                     id: extra.id,
@@ -157,6 +176,8 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
             let label: String
             if config.id == "claude" {
                 label = "5-hour limit"
+            } else if config.id == "cursor" {
+                label = "Total"
             } else if sessionWindowMinutes == 300 {
                 label = "5-hour"
             } else if config.id == "grok" {
@@ -191,6 +212,8 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
             let label: String
             if config.id == "claude" {
                 label = "Weekly · all models"
+            } else if config.id == "cursor" {
+                label = "Cursor"
             } else if config.id == "grok" {
                 label = "On-demand"
             } else {
@@ -201,6 +224,22 @@ public struct ProviderUsage: Sendable, Equatable, Identifiable {
                 title: label,
                 usedPercent: w,
                 resetsAt: weeklyResetsAt,
+                asAbsolute: asAbsolute
+            ))
+        }
+
+        if let t = tertiaryPercent {
+            let label: String
+            if config.id == "cursor" {
+                label = "Third Party"
+            } else {
+                label = "Third Party"
+            }
+            items.append(QuotaWindowItem(
+                id: "tertiary",
+                title: label,
+                usedPercent: t,
+                resetsAt: tertiaryResetsAt,
                 asAbsolute: asAbsolute
             ))
         }

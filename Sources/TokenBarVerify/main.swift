@@ -14,11 +14,11 @@ func runVerification() async {
     controller.setup()
 
     // 1. Live Data Verification
-    store.enabledProviderIDs = ["claude", "codex", "antigravity"]
+    store.enabledProviderIDs = ["claude", "codex", "antigravity", "cursor"]
     print("\n[1] Fetching live quotas via parallel codexbar CLI...")
     await store.refreshAll()
 
-    for id in ["claude", "codex", "antigravity"] {
+    for id in ["claude", "codex", "antigravity", "cursor"] {
         guard let config = ProviderConfig.byID[id] else { continue }
         let u = store.usage(for: id)
         print("--------------------------------------------------")
@@ -54,6 +54,7 @@ func runVerification() async {
     print("[3] Sizing & Scaling Verification: 1, 3, 4, 10, 30 Providers")
     print("==================================================")
 
+    store.seedSampleData()
     let typicalMacScreenHeight: CGFloat = 830.0
     let testCounts = [1, 3, 4, 10, 30]
     for count in testCounts {
@@ -70,6 +71,7 @@ func runVerification() async {
         print("• Configuration: \(count) provider(s)")
         print("  - Effective Mode: \(effective.rawValue.capitalized) (Expected: \(expectedMode.rawValue.capitalized))")
         print("  - Content Height: \(Int(sizing.contentHeight))pt | Target Height: \(Int(sizing.targetHeight))pt | Scroll Required: \(sizing.needsScroll)")
+        fflush(stdout)
 
         assert(effective == expectedMode, "Effective mode mismatch for \(count) providers")
 

@@ -135,6 +135,12 @@ public actor CodexBarCLIBridge {
             usage.weeklyPercent = weeklyWin?.usedPercent
             usage.weeklyWindowMinutes = weeklyWin?.windowMinutes
             usage.weeklyResetsAt = weeklyWin?.resetsAt
+
+            if config.sessionField != .tertiary && config.weeklyField != .tertiary, let tert = data.tertiary {
+                usage.tertiaryPercent = tert.usedPercent
+                usage.tertiaryWindowMinutes = tert.windowMinutes
+                usage.tertiaryResetsAt = tert.resetsAt
+            }
         }
 
         return usage

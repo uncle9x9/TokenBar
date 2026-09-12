@@ -156,4 +156,51 @@ final class ResetTimeFormatterTests: XCTestCase {
         XCTAssertEqual(unauthGrok.statusDescription, "Error")
         XCTAssertTrue(unauthGrok.normalisedQuotaWindows(config: grokConfig!).isEmpty, "Must not generate synthetic quota bars on error")
     }
+
+    func testCursorMultiWindowNormalisationAndLongResetDate() {
+        let now = Date()
+        let cursorConfig = ProviderConfig.byID["cursor"]!
+
+        // Test modern CodexBar 0.60.0 Cursor schema:
+        // primary: Total (5.6% used), resets in 20 days
+        // secondary: Cursor (5.3% used)
+        // tertiary: Third Party (11.4% used)
+        // extraRateWindows: Grok Bot (0.05% used)
+        let in20Days = now.addingTimeInterval(20 * 86400)
+        let cursorUsage = ProviderUsage(
+            id: "cursor",
+            displayName: "Cursor",
+            sessionPercent: 5.6,
+            sessionWindowMinutes: 43200,
+            sessionResetsAt: in20Days,
+            weeklyPercent: 5.3,
+            weeklyWindowMinutes: 43200,
+            weeklyResetsAt: in20Days,
+            tertiaryPercent: 11.4,
+            tertiaryWindowMinutes: 43200,
+            tertiaryResetsAt: in20Days,
+            extraWindows: [
+                ExtraWindowUsage(id: "cursor-grok-bot", title: "Grok Bot", usedPercent: 0.05, resetsAt: now.addingTimeInterval(6 * 86400))
+            ]
+        )
+
+        let windows = cursorUsage.normalisedQuotaWindows(config: cursorConfig, asAbsolute: true)
+        XCTAssertEqual(windows.count, 4)
+        XCTAssertEqual(windows[0].title, "Total")
+        XCTAssertEqual(windows[0].usedPercent, 5.6)
+        XCTAssertTrue(windows[0].resetText?.contains("Resets ") == true)
+
+        XCTAssertEqual(windows[1].title, "Cursor")
+        XCTAssertEqual(windows[1].usedPercent, 5.3)
+
+        XCTAssertEqual(windows[2].title, "Third Party")
+        XCTAssertEqual(windows[2].usedPercent, 11.4)
+
+        XCTAssertEqual(windows[3].title, "Grok Bot")
+        XCTAssertEqual(windows[3].usedPercent, 0.05)
+
+        // Verify date > 7 days includes month and date in absolute description
+        let resetAbs = ResetTimeFormatter.absoluteDescription(from: in20Days, now: now)
+        XCTAssertFalse(resetAbs.hasPrefix("Fri "), "Dates beyond 7 days must include month name, not just weekday")
+    }
 }

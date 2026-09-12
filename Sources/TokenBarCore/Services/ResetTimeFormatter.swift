@@ -88,8 +88,14 @@ public enum ResetTimeFormatter {
             return "Tomorrow, \(timeFormatter.string(from: date))"
         }
 
+        if let weekLater = calendar.date(byAdding: .day, value: 7, to: now), date < weekLater {
+            let fullFormatter = DateFormatter()
+            fullFormatter.dateFormat = "EEE h:mm a"
+            return fullFormatter.string(from: date)
+        }
+
         let fullFormatter = DateFormatter()
-        fullFormatter.dateFormat = "EEE h:mm a"
+        fullFormatter.dateFormat = "MMM d, h:mm a"
         return fullFormatter.string(from: date)
     }
 
