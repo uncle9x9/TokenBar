@@ -165,4 +165,21 @@ final class StatusItemControllerTests: XCTestCase {
 
         window.close()
     }
+
+    func testFooterButtonsAndFirstMouseHitTesting() {
+        let controller = StatusItemController.shared
+        controller.setup()
+
+        guard let pop = controller.popover, let hosting = pop.contentViewController else {
+            XCTFail("Popover missing")
+            return
+        }
+
+        XCTAssertTrue(hosting.view.acceptsFirstMouse(for: nil), "Popover view MUST accept first mouse so footer buttons click on first click")
+
+        let mirror = Mirror(reflecting: controller)
+        if let btnTracking = mirror.children.first(where: { $0.label == "buttonTrackingView" })?.value as? NSView {
+            XCTAssertNil(btnTracking.hitTest(NSPoint(x: 10, y: 10)), "HoverTrackingView MUST return nil from hitTest so clicks reach NSStatusBarButton")
+        }
+    }
 }

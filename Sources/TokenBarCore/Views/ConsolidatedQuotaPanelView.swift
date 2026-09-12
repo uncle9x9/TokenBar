@@ -17,11 +17,18 @@ public struct ConsolidatedQuotaPanelView: View {
     @Bindable var store: UsageStore
     public var onOpenSettings: (() -> Void)?
     public var onQuit: (() -> Void)?
+    public var onHoverChanged: ((Bool) -> Void)?
 
-    public init(store: UsageStore, onOpenSettings: (() -> Void)? = nil, onQuit: (() -> Void)? = nil) {
+    public init(
+        store: UsageStore,
+        onOpenSettings: (() -> Void)? = nil,
+        onQuit: (() -> Void)? = nil,
+        onHoverChanged: ((Bool) -> Void)? = nil
+    ) {
         self.store = store
         self.onOpenSettings = onOpenSettings
         self.onQuit = onQuit
+        self.onHoverChanged = onHoverChanged
     }
 
     public static func calculateSizing(store: UsageStore, maxAvailableHeight: CGFloat) -> PanelSizing {
@@ -125,6 +132,9 @@ public struct ConsolidatedQuotaPanelView: View {
         }
         .frame(width: 360, height: sizing.targetHeight)
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.96))
+        .onHover { isHovered in
+            onHoverChanged?(isHovered)
+        }
     }
 
     // MARK: - Header
@@ -293,7 +303,7 @@ public struct ConsolidatedQuotaPanelView: View {
 
     // MARK: - Footer Bar
     private var footerBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             Button {
                 Task { await store.refreshAll() }
             } label: {
@@ -303,8 +313,7 @@ public struct ConsolidatedQuotaPanelView: View {
                 }
                 .font(.system(size: 11, weight: .medium))
             }
-            .buttonStyle(.plain)
-            .focusable(false)
+            .buttonStyle(FooterActionButtonStyle())
             .disabled(store.isRefreshing)
 
             Spacer()
@@ -318,8 +327,7 @@ public struct ConsolidatedQuotaPanelView: View {
                 }
                 .font(.system(size: 11))
             }
-            .buttonStyle(.plain)
-            .focusable(false)
+            .buttonStyle(FooterActionButtonStyle())
 
             Text("•")
                 .font(.system(size: 9))
@@ -329,10 +337,28 @@ public struct ConsolidatedQuotaPanelView: View {
                 onQuit?()
             }
             .font(.system(size: 11))
-            .buttonStyle(.plain)
-            .focusable(false)
-            .foregroundStyle(.secondary)
+            .buttonStyle(FooterActionButtonStyle())
         }
         .foregroundStyle(.secondary)
+    }
+}
+
+public struct FooterActionButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(configuration.isPressed ? Color.primary : (isHovered ? Color.primary : Color.secondary))
+            .opacity(configuration.isPressed ? 0.65 : 1.0)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+            )
+            .contentShape(Rectangle())
+            .onHover { isHovered = $0 }
     }
 }

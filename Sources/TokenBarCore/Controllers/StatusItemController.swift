@@ -6,6 +6,11 @@ final class HoverTrackingView: NSView {
     var onMouseExit: (() -> Void)?
     private var trackingAreaObj: NSTrackingArea?
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Return nil to pass through all mouse clicks to NSStatusBarButton beneath
+        return nil
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let existing = trackingAreaObj {
@@ -30,6 +35,25 @@ final class HoverTrackingView: NSView {
     }
 }
 
+final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+}
+
+final class FirstMouseHostingController<Content: View>: NSHostingController<Content> {
+    override init(rootView: Content) {
+        super.init(rootView: rootView)
+        let customView = FirstMouseHostingView(rootView: rootView)
+        customView.autoresizingMask = [.width, .height]
+        self.view = customView
+    }
+
+    @MainActor required dynamic init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+}
+
 @MainActor
 public final class StatusItemController: NSObject, NSPopoverDelegate {
     public static let shared = StatusItemController()
@@ -48,7 +72,6 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
     public private(set) var isPinned = false
 
     private var buttonTrackingView: HoverTrackingView?
-    private var popoverTrackingView: HoverTrackingView?
 
     public override init() {
         super.init()
@@ -105,32 +128,23 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
             },
             onQuit: { [weak self] in
                 self?.quitClicked()
+            },
+            onHoverChanged: { [weak self] isHovered in
+                if isHovered {
+                    self?.handlePopoverMouseEnter()
+                } else {
+                    self?.handlePopoverMouseExit()
+                }
             }
         )
 
         let initialSize = currentPopoverSize()
         p.contentSize = initialSize
 
-        let hostingController = NSHostingController(rootView: panelView)
+        let hostingController = FirstMouseHostingController(rootView: panelView)
         hostingController.preferredContentSize = initialSize
         p.contentViewController = hostingController
         self.popover = p
-    }
-
-    private func attachPopoverTracking() {
-        guard let contentView = popover?.contentViewController?.view else { return }
-        if popoverTrackingView?.superview == contentView { return }
-
-        let tracking = HoverTrackingView(frame: contentView.bounds)
-        tracking.autoresizingMask = [.width, .height]
-        tracking.onMouseEnter = { [weak self] in
-            self?.handlePopoverMouseEnter()
-        }
-        tracking.onMouseExit = { [weak self] in
-            self?.handlePopoverMouseExit()
-        }
-        contentView.addSubview(tracking, positioned: .below, relativeTo: nil)
-        popoverTrackingView = tracking
     }
 
     private func startObserving() {
@@ -246,7 +260,9 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
 
         isPinned = pinned
         pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        attachPopoverTracking()
+        if let window = pop.contentViewController?.view.window {
+            window.makeKey()
+        }
     }
 
     public func hideConsolidatedPanel(force: Bool = false) {
@@ -405,6 +421,8 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
     }
 
     @objc public func openSettingsClicked() {
+        hideConsolidatedPanel(force: true)
+
         if let controller = settingsWindowController {
             controller.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
