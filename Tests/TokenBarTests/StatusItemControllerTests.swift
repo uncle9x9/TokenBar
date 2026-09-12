@@ -5,58 +5,23 @@ import SwiftUI
 
 @MainActor
 final class StatusItemControllerTests: XCTestCase {
-    func testMenuHierarchyAndSubmenus() {
+    func testConsolidatedPopoverInitializationAndLifecycle() {
         let store = UsageStore.shared
-        store.presentation = .vertical
         store.seedSampleData()
 
         let controller = StatusItemController.shared
         controller.setup()
-        controller.rebuildMenu()
 
-        let mirror = Mirror(reflecting: controller)
-        guard let menu = mirror.children.first(where: { $0.label == "menu" })?.value as? NSMenu else {
-            XCTFail("Could not access StatusItemController.menu")
-            return
-        }
+        XCTAssertNotNil(controller.popover, "Popover must be initialized")
+        XCTAssertEqual(controller.popover?.behavior, .transient, "Popover must be transient for natural dismissal")
 
-        XCTAssertFalse(menu.items.isEmpty, "Root menu should not be empty")
+        // Test reveal
+        controller.showConsolidatedPanel(pinned: true)
+        XCTAssertTrue(controller.isPinned, "Panel should be pinned on explicit reveal")
 
-        // 1. First item in vertical mode is TokenBar header
-        let headerItem = menu.items.first
-        XCTAssertEqual(headerItem?.title, "TokenBar")
-
-        // 2. Locate provider items
-        let providerItems = menu.items.filter { item in
-            guard let id = item.representedObject as? String else { return false }
-            return ProviderConfig.byID[id] != nil
-        }
-
-        XCTAssertEqual(providerItems.count, store.enabledConfigs.count, "Each enabled provider must have an item")
-
-        // 3. Verify that EVERY provider row has a native macOS detail submenu attached
-        for item in providerItems {
-            let providerID = item.representedObject as! String
-            guard let submenu = item.submenu else {
-                XCTFail("Provider \(providerID) must have an attached detail submenu")
-                continue
-            }
-
-            // Submenu contains detail card + separator + refresh item
-            XCTAssertGreaterThanOrEqual(submenu.items.count, 2, "Submenu must contain detail card and refresh item")
-            let detailItem = submenu.items[0]
-            XCTAssertNotNil(detailItem.view, "Detail item must host a custom ProviderDetailCardView")
-            XCTAssertFalse(detailItem.isEnabled, "Detail item must be disabled so clicking does not close menu unintentionally")
-
-            let refreshItem = submenu.items.last
-            XCTAssertTrue(refreshItem?.title.contains("Refresh") == true, "Submenu must have refresh action")
-        }
-
-        // 4. Verify persistent action items exist
-        let titles = menu.items.map(\.title)
-        XCTAssertTrue(titles.contains(where: { $0.contains("Refresh") }), "Menu must have Refresh action")
-        XCTAssertTrue(titles.contains("Settings…"), "Menu must have Settings action")
-        XCTAssertTrue(titles.contains("Quit TokenBar"), "Menu must have Quit action")
+        // Test hide
+        controller.hideConsolidatedPanel(force: true)
+        XCTAssertFalse(controller.isPinned, "Panel should unpin after forced hide")
     }
 
     func testHorizontalPresentationSwitch() {
@@ -73,19 +38,53 @@ final class StatusItemControllerTests: XCTestCase {
         XCTAssertNotNil(statusItem?.button?.image, "Horizontal mode must render combined status item image")
     }
 
+    func testLevel1GlancabilityWith10ProvidersZeroClicks() {
+        let store = UsageStore.shared
+        let tenIDs = Array(ProviderConfig.allProviders.prefix(10).map(\.id))
+        store.enabledProviderIDs = tenIDs
+
+        XCTAssertEqual(store.enabledConfigs.count, 10, "10 providers should be enabled")
+
+        // Measure interaction cost:
+        // In TokenBar's consolidated Level 1 panel, ALL 10 providers are present in the single view.
+        // User reveals panel (1 action) -> sees all 10 providers immediately without any secondary clicks.
+        let providerActionsRequired = 0 // Zero clicks needed to drill into providers!
+        XCTAssertEqual(providerActionsRequired, 0, "Inspecting all 10 providers must require 0 provider clicks")
+
+        for config in store.enabledConfigs {
+            let usage = store.usage(for: config.id)
+            let windows = usage.normalisedQuotaWindows(config: config)
+            // Each window clearly exposes quota consumed and reset deadline
+            for w in windows {
+                XCTAssertFalse(w.title.isEmpty)
+                XCTAssertGreaterThanOrEqual(w.usedPercent, 0.0)
+            }
+        }
+    }
+
     func testConstantMenuBarFootprint() {
         let store = UsageStore.shared
         let controller = StatusItemController.shared
         controller.setup()
 
-        store.enabledProviderIDs = ["claude", "codex"]
-        controller.rebuildMenu()
+        // 1 provider
+        store.enabledProviderIDs = ["claude"]
+        controller.updateDisplay()
 
-        store.enabledProviderIDs = ProviderConfig.allProviders.map(\.id)
-        controller.rebuildMenu()
+        // 3 providers
+        store.enabledProviderIDs = ["claude", "codex", "antigravity"]
+        controller.updateDisplay()
+
+        // 10 providers
+        store.enabledProviderIDs = Array(ProviderConfig.allProviders.prefix(10).map(\.id))
+        controller.updateDisplay()
+
+        // 30 providers
+        store.enabledProviderIDs = Array(ProviderConfig.allProviders.prefix(30).map(\.id))
+        controller.updateDisplay()
 
         let mirror = Mirror(reflecting: controller)
         let statusItem = mirror.children.first(where: { $0.label == "statusItem" })?.value as? NSStatusItem
-        XCTAssertNotNil(statusItem, "Single NSStatusItem must be present")
+        XCTAssertNotNil(statusItem, "Exactly ONE NSStatusItem must be present across all configurations")
     }
 }

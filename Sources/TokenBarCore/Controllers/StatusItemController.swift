@@ -1,15 +1,54 @@
 import AppKit
 import SwiftUI
 
+final class HoverTrackingView: NSView {
+    var onMouseEnter: (() -> Void)?
+    var onMouseExit: (() -> Void)?
+    private var trackingAreaObj: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingAreaObj {
+            removeTrackingArea(existing)
+        }
+        let t = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(t)
+        trackingAreaObj = t
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onMouseEnter?()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onMouseExit?()
+    }
+}
+
 @MainActor
-public final class StatusItemController: NSObject, NSMenuDelegate {
+public final class StatusItemController: NSObject, NSPopoverDelegate {
     public static let shared = StatusItemController()
 
     private var statusItem: NSStatusItem!
-    private let menu = NSMenu()
+    public private(set) var popover: NSPopover?
     private let store = UsageStore.shared
     private var settingsWindowController: NSWindowController?
     private var observationTask: Task<Void, Never>?
+
+    // Hover & dismissal hysteresis tracking
+    private var hoverTimer: Timer?
+    private var dismissTimer: Timer?
+    private var isMouseInButton = false
+    private var isMouseInPopover = false
+    public private(set) var isPinned = false
+
+    private var buttonTrackingView: HoverTrackingView?
+    private var popoverTrackingView: HoverTrackingView?
 
     public override init() {
         super.init()
@@ -18,17 +57,69 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     public func setup() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        menu.autoenablesItems = false
-        menu.delegate = self
-        statusItem.menu = menu
+        if let button = statusItem.button {
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
+            let tracking = HoverTrackingView(frame: button.bounds)
+            tracking.autoresizingMask = [.width, .height]
+            tracking.onMouseEnter = { [weak self] in
+                self?.handleButtonMouseEnter()
+            }
+            tracking.onMouseExit = { [weak self] in
+                self?.handleButtonMouseExit()
+            }
+            button.addSubview(tracking)
+            buttonTrackingView = tracking
+        }
+
+        setupPopover()
         updateDisplay()
-        rebuildMenu()
         startObserving()
     }
 
     deinit {
         observationTask?.cancel()
+        hoverTimer?.invalidate()
+        dismissTimer?.invalidate()
+    }
+
+    private func setupPopover() {
+        let p = NSPopover()
+        p.behavior = .transient
+        p.animates = true
+        p.delegate = self
+
+        let panelView = ConsolidatedQuotaPanelView(
+            store: store,
+            onOpenSettings: { [weak self] in
+                self?.openSettingsClicked()
+            },
+            onQuit: { [weak self] in
+                self?.quitClicked()
+            }
+        )
+
+        let hostingController = NSHostingController(rootView: panelView)
+        p.contentViewController = hostingController
+        self.popover = p
+    }
+
+    private func attachPopoverTracking() {
+        guard let contentView = popover?.contentViewController?.view else { return }
+        if popoverTrackingView?.superview == contentView { return }
+
+        let tracking = HoverTrackingView(frame: contentView.bounds)
+        tracking.autoresizingMask = [.width, .height]
+        tracking.onMouseEnter = { [weak self] in
+            self?.handlePopoverMouseEnter()
+        }
+        tracking.onMouseExit = { [weak self] in
+            self?.handlePopoverMouseExit()
+        }
+        contentView.addSubview(tracking, positioned: .below, relativeTo: nil)
+        popoverTrackingView = tracking
     }
 
     private func startObserving() {
@@ -38,10 +129,6 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
                 self?.updateDisplay()
             }
         }
-    }
-
-    public func menuWillOpen(_ menu: NSMenu) {
-        rebuildMenu()
     }
 
     public func updateDisplay() {
@@ -59,7 +146,7 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
 
         switch presentation {
         case .horizontal:
-            // Upstream horizontal combined presentation
+            // Upstream horizontal combined presentation (Level 0 glanceability)
             let providerDataList = configs.map { config -> StatusItemRenderer.ProviderData in
                 let usage = store.usage(for: config.id)
                 let ds = store.displaySetting(for: config.id)
@@ -111,7 +198,7 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
             button.toolTip = buildTooltip()
 
         case .vertical, .automatic:
-            // Single TokenBar icon
+            // Single TokenBar icon (compact footprint for notch avoidance)
             button.title = ""
             let icon = NSImage(systemSymbolName: "gauge.with.needle.fill", accessibilityDescription: "TokenBar")
             icon?.isTemplate = true
@@ -121,37 +208,115 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     public func rebuildMenu() {
-        menu.removeAllItems()
+        updateDisplay()
+    }
 
-        let configs = store.enabledConfigs
-        let presentation = store.effectivePresentation
+    // MARK: - Popover Presentation & Hover
 
-        if presentation == .vertical {
-            // Header item
-            let headerItem = NSMenuItem(title: "TokenBar", action: nil, keyEquivalent: "")
-            let titleFont = NSFont.systemFont(ofSize: 13, weight: .bold)
-            headerItem.attributedTitle = NSAttributedString(string: "TokenBar", attributes: [.font: titleFont])
-            headerItem.isEnabled = false
-            menu.addItem(headerItem)
-
-            menu.addItem(.separator())
+    public func showConsolidatedPanel(pinned: Bool = false) {
+        guard let button = statusItem.button, let pop = popover else { return }
+        if pop.isShown {
+            if pinned { isPinned = true }
+            return
         }
 
-        if configs.isEmpty {
-            let emptyItem = NSMenuItem(title: "No providers enabled", action: nil, keyEquivalent: "")
-            emptyItem.isEnabled = false
-            menu.addItem(emptyItem)
-        } else {
-            for config in configs {
-                let usage = store.usage(for: config.id)
-                let item = makeProviderMenuItem(config: config, usage: usage)
-                menu.addItem(item)
+        isPinned = pinned
+        pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        attachPopoverTracking()
+    }
+
+    public func hideConsolidatedPanel(force: Bool = false) {
+        if force { isPinned = false }
+        guard let pop = popover, pop.isShown else { return }
+        if isPinned && !force { return }
+        isPinned = false
+        pop.performClose(nil)
+    }
+
+    public func popoverDidClose(_ notification: Notification) {
+        isPinned = false
+        isMouseInButton = false
+        isMouseInPopover = false
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        dismissTimer?.invalidate()
+        dismissTimer = nil
+    }
+
+    // MARK: - Mouse Event Handlers
+
+    private func handleButtonMouseEnter() {
+        isMouseInButton = true
+        dismissTimer?.invalidate()
+        dismissTimer = nil
+
+        // 120ms debounce so rapid pointer movement across status bar does not spuriously trigger
+        hoverTimer?.invalidate()
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isMouseInButton else { return }
+                self.showConsolidatedPanel(pinned: false)
             }
         }
+    }
 
-        menu.addItem(.separator())
+    private func handleButtonMouseExit() {
+        isMouseInButton = false
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        scheduleDismissal()
+    }
 
-        // Persistent Actions
+    private func handlePopoverMouseEnter() {
+        isMouseInPopover = true
+        dismissTimer?.invalidate()
+        dismissTimer = nil
+    }
+
+    private func handlePopoverMouseExit() {
+        isMouseInPopover = false
+        scheduleDismissal()
+    }
+
+    private func scheduleDismissal() {
+        guard !isPinned else { return }
+        dismissTimer?.invalidate()
+        // 300ms hysteresis buffer allows seamless movement between status item and popover
+        dismissTimer = Timer.scheduledTimer(withTimeInterval: 0.30, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                if !self.isMouseInButton && !self.isMouseInPopover && !self.isPinned {
+                    self.hideConsolidatedPanel(force: true)
+                }
+            }
+        }
+    }
+
+    // MARK: - Click Handling
+
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        guard let event = NSApp.currentEvent else { return }
+
+        if event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
+            showContextMenu(from: sender, with: event)
+            return
+        }
+
+        // Left click toggles pinned panel
+        if let pop = popover, pop.isShown {
+            if isPinned {
+                hideConsolidatedPanel(force: true)
+            } else {
+                isPinned = true
+            }
+        } else {
+            showConsolidatedPanel(pinned: true)
+        }
+    }
+
+    private func showContextMenu(from button: NSStatusBarButton, with event: NSEvent) {
+        let menu = NSMenu()
+
         let refreshItem = NSMenuItem(
             title: store.isRefreshing ? "Refreshing Providers…" : "Refresh All",
             action: #selector(refreshAllClicked),
@@ -159,10 +324,6 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         )
         refreshItem.target = self
         refreshItem.isEnabled = !store.isRefreshing
-        if let icon = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil) {
-            icon.isTemplate = true
-            refreshItem.image = icon
-        }
         menu.addItem(refreshItem)
 
         let settingsItem = NSMenuItem(
@@ -171,10 +332,6 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
             keyEquivalent: ","
         )
         settingsItem.target = self
-        if let icon = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil) {
-            icon.isTemplate = true
-            settingsItem.image = icon
-        }
         menu.addItem(settingsItem)
 
         menu.addItem(.separator())
@@ -186,72 +343,8 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         )
         quitItem.target = self
         menu.addItem(quitItem)
-    }
 
-    private func makeProviderMenuItem(config: ProviderConfig, usage: ProviderUsage) -> NSMenuItem {
-        let quotaText: String
-        if usage.error != nil {
-            quotaText = "Err"
-        } else if let s = usage.sessionPercent {
-            quotaText = "\(Int(s))%"
-        } else if let b = usage.balance {
-            quotaText = b
-        } else {
-            quotaText = "--"
-        }
-
-        let item = NSMenuItem()
-        if let icon = ProviderIcons.icon(for: config.id, size: 16) {
-            item.image = icon
-        } else {
-            item.image = NSImage(systemSymbolName: "app.fill", accessibilityDescription: nil)
-        }
-
-        // Use native paragraph style with tab stop for clean right-aligned quota display
-        let pStyle = NSMutableParagraphStyle()
-        let tab = NSTextTab(textAlignment: .right, location: 190, options: [:])
-        pStyle.tabStops = [tab]
-
-        let titleStr = "\(config.displayName)\t\(quotaText)"
-        let attrTitle = NSMutableAttributedString(string: titleStr, attributes: [
-            .font: NSFont.menuFont(ofSize: 14),
-            .paragraphStyle: pStyle
-        ])
-        item.attributedTitle = attrTitle
-        item.representedObject = config.id
-        item.target = self
-        item.action = #selector(providerItemClicked(_:))
-
-        // Native detail submenu
-        let detailSubmenu = NSMenu()
-        detailSubmenu.autoenablesItems = false
-
-        let cardView = ProviderDetailCardView(config: config, usage: usage, width: 280)
-        let hostingView = NSHostingView(rootView: cardView)
-        hostingView.frame.size = hostingView.fittingSize
-
-        let cardMenuItem = NSMenuItem()
-        cardMenuItem.view = hostingView
-        cardMenuItem.isEnabled = false
-        detailSubmenu.addItem(cardMenuItem)
-
-        detailSubmenu.addItem(.separator())
-
-        let refreshSingleItem = NSMenuItem(
-            title: "Refresh \(config.displayName)",
-            action: #selector(refreshSingleProviderClicked(_:)),
-            keyEquivalent: ""
-        )
-        refreshSingleItem.representedObject = config.id
-        refreshSingleItem.target = self
-        if let icon = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil) {
-            icon.isTemplate = true
-            refreshSingleItem.image = icon
-        }
-        detailSubmenu.addItem(refreshSingleItem)
-
-        item.submenu = detailSubmenu
-        return item
+        NSMenu.popUpContextMenu(menu, with: event, for: button)
     }
 
     private func buildTooltip() -> String {
@@ -274,43 +367,20 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
                 line += "--"
             }
             lines.append(line)
-
-            for extra in usage.extraWindows {
-                lines.append("  \(extra.title): \(Int(extra.usedPercent))%")
-            }
         }
         return lines.joined(separator: "\n")
     }
 
     // MARK: - Actions
 
-    @objc private func refreshAllClicked() {
+    @objc public func refreshAllClicked() {
         Task {
             await store.refreshAll()
             updateDisplay()
-            rebuildMenu()
         }
     }
 
-    @objc private func refreshSingleProviderClicked(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        Task {
-            await store.refreshProvider(id: id)
-            updateDisplay()
-            rebuildMenu()
-        }
-    }
-
-    @objc private func providerItemClicked(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        Task {
-            await store.refreshProvider(id: id)
-            updateDisplay()
-            rebuildMenu()
-        }
-    }
-
-    @objc private func openSettingsClicked() {
+    @objc public func openSettingsClicked() {
         if let controller = settingsWindowController {
             controller.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -331,7 +401,7 @@ public final class StatusItemController: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc private func quitClicked() {
+    @objc public func quitClicked() {
         NSApp.terminate(nil)
     }
 }
