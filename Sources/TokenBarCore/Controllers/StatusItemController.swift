@@ -87,7 +87,8 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
 
         if let button = statusItem.button {
             appearanceObservation = button.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
-                Task { @MainActor in self?.updateDisplay() }
+                guard let controller = self else { return }
+                Task { @MainActor in controller.updateDisplay() }
             }
             button.target = self
             button.action = #selector(statusItemClicked(_:))
@@ -106,11 +107,12 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         }
 
         store.onRefreshingChanged = { [weak self] isRefreshing in
+            guard let controller = self else { return }
             Task { @MainActor in
                 if isRefreshing {
-                    self?.startLoadingAnimation()
+                    controller.startLoadingAnimation()
                 } else {
-                    self?.stopLoadingAnimation()
+                    controller.stopLoadingAnimation()
                 }
             }
         }
@@ -134,10 +136,10 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         guard loadingAnimationTimer == nil else { return }
         // 20 fps: 0.05s interval, +9 degrees per frame = 2.0s per 360 degree counter-clockwise revolution
         loadingAnimationTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard let controller = self else { return }
             Task { @MainActor in
-                guard let self else { return }
-                self.loadingRotationAngle = (self.loadingRotationAngle + 9.0).truncatingRemainder(dividingBy: 360.0)
-                self.updateDisplay()
+                controller.loadingRotationAngle = (controller.loadingRotationAngle + 9.0).truncatingRemainder(dividingBy: 360.0)
+                controller.updateDisplay()
             }
         }
     }
@@ -320,9 +322,10 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         // 120ms debounce so rapid pointer movement across status bar does not spuriously trigger
         hoverTimer?.invalidate()
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: false) { [weak self] _ in
+            guard let controller = self else { return }
             Task { @MainActor in
-                guard let self, self.isMouseInButton else { return }
-                self.showConsolidatedPanel(pinned: false)
+                guard controller.isMouseInButton else { return }
+                controller.showConsolidatedPanel(pinned: false)
             }
         }
     }
@@ -350,10 +353,10 @@ public final class StatusItemController: NSObject, NSPopoverDelegate {
         dismissTimer?.invalidate()
         // 300ms hysteresis buffer allows seamless movement between status item and popover
         dismissTimer = Timer.scheduledTimer(withTimeInterval: 0.30, repeats: false) { [weak self] _ in
+            guard let controller = self else { return }
             Task { @MainActor in
-                guard let self else { return }
-                if !self.isMouseInButton && !self.isMouseInPopover && !self.isPinned {
-                    self.hideConsolidatedPanel(force: true)
+                if !controller.isMouseInButton && !controller.isMouseInPopover && !controller.isPinned {
+                    controller.hideConsolidatedPanel(force: true)
                 }
             }
         }

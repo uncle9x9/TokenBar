@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   package-and-release:
-    name: Package & Release DMG
-    runs-on: macos-14
+    name: Package & Release DMG (macOS Sequoia)
+    runs-on: macos-15
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

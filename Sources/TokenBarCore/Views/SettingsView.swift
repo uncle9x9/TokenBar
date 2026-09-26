@@ -129,6 +129,7 @@ public struct ProviderSettingsSection<Content: View>: View {
 
 // MARK: - Main Settings View
 
+@MainActor
 public struct SettingsView: View {
     @State private var store = UsageStore.shared
     @State private var selectedTab: SettingsTab = .general
@@ -202,6 +203,7 @@ public struct SettingsView: View {
 
 // MARK: - General Tab
 
+@MainActor
 public struct GeneralSettingsView: View {
     @Bindable var store: UsageStore
 
@@ -451,6 +453,7 @@ public struct GeneralSettingsView: View {
 
 // MARK: - Providers Tab
 
+@MainActor
 public struct ProvidersSettingsView: View {
     @Bindable var store: UsageStore
     @State private var selectedID: String?
@@ -487,6 +490,7 @@ public struct ProvidersSettingsView: View {
 
 // MARK: - Provider Sidebar
 
+@MainActor
 public struct ProviderSidebarView: View {
     @Bindable var store: UsageStore
     @Binding var selectedID: String?
@@ -587,6 +591,7 @@ public struct ProviderSidebarView: View {
 
 // MARK: - Provider Sidebar Row
 
+@MainActor
 public struct ProviderSidebarRowView: View {
     let config: ProviderConfig
     let isSelected: Bool
@@ -747,6 +752,7 @@ public struct ProviderDropDelegate: DropDelegate {
 
 // MARK: - Provider Detail View
 
+@MainActor
 public struct ProviderDetailView: View {
     let config: ProviderConfig
     @Bindable var store: UsageStore
@@ -967,6 +973,7 @@ public struct ProviderDetailView: View {
 
 // MARK: - About Tab
 
+@MainActor
 public struct AboutSettingsView: View {
     @State private var iconHover = false
     @State private var detectedCLIVersion: String?

@@ -13,6 +13,7 @@ public struct PanelSizing: Equatable, Sendable {
     }
 }
 
+@MainActor
 public struct ConsolidatedQuotaPanelView: View {
     @Bindable var store: UsageStore
     public var onOpenSettings: (() -> Void)?
