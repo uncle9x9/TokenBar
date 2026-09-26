@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package-and-release:
+    name: Package & Release DMG
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Show Environment
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Run Test Suite
+        run: swift test
+
+      - name: Build & Package DMG
+        run: |
+          chmod +x Scripts/*.sh
+          ./Scripts/create_dmg.sh
+
+      - name: Generate Checksums
+        working-directory: dist
+        run: |
+          shasum -a 256 *.dmg > checksums.txt
+          cat checksums.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/TokenBar-*.dmg
+            dist/TokenBar.dmg
+            dist/checksums.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

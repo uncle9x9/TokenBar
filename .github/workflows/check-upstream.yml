@@ -1,0 +1,80 @@
+name: Check Upstream Releases
+
+on:
+  schedule:
+    - cron: '0 2 * * 1' # Runs every Monday at 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check-codexbar-upstream:
+    name: Check CodexBar & CodexBarMenuBar Releases
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Fetch Upstream Releases
+        id: upstream
+        run: |
+          CODEXBAR_LATEST=$(curl -s https://api.github.com/repos/steipete/CodexBar/releases/latest | jq -r .tag_name // "unknown")
+          MENUBAR_LATEST=$(curl -s https://api.github.com/repos/Lobobodev/CodexBarMenuBar/releases/latest | jq -r .tag_name // "unknown")
+          echo "codexbar_version=$CODEXBAR_LATEST" >> $GITHUB_OUTPUT
+          echo "menubar_version=$MENUBAR_LATEST" >> $GITHUB_OUTPUT
+
+      - name: Check Against Current Tracked Versions
+        id: compare
+        run: |
+          SETTINGS_FILE="Sources/TokenBarCore/Views/SettingsView.swift"
+          TRACKED_MENUBAR=$(grep -oE 'Tracking CodexBarMenuBar v[0-9.]+' "$SETTINGS_FILE" | head -1 | awk '{print $3}' || echo "v0.32.4")
+          TRACKED_CLI=$(grep -oE 'CodexBar CLI v[0-9.]+' "$SETTINGS_FILE" | head -1 | awk '{print $3}' || echo "v0.60.0")
+
+          echo "Current tracked CodexBar CLI: $TRACKED_CLI"
+          echo "Current tracked CodexBarMenuBar: $TRACKED_MENUBAR"
+          echo "Upstream CodexBar CLI: ${{ steps.upstream.outputs.codexbar_version }}"
+          echo "Upstream CodexBarMenuBar: ${{ steps.upstream.outputs.menubar_version }}"
+
+          HAS_UPDATE="false"
+          UPDATE_SUMMARY=""
+
+          if [ "${{ steps.upstream.outputs.codexbar_version }}" != "unknown" ] && [ "${{ steps.upstream.outputs.codexbar_version }}" != "$TRACKED_CLI" ]; then
+            HAS_UPDATE="true"
+            UPDATE_SUMMARY="${UPDATE_SUMMARY}\n- **steipete/CodexBar** updated from \`${TRACKED_CLI}\` to \`${{ steps.upstream.outputs.codexbar_version }}\`"
+          fi
+
+          if [ "${{ steps.upstream.outputs.menubar_version }}" != "unknown" ] && [ "${{ steps.upstream.outputs.menubar_version }}" != "$TRACKED_MENUBAR" ]; then
+            HAS_UPDATE="true"
+            UPDATE_SUMMARY="${UPDATE_SUMMARY}\n- **Lobobodev/CodexBarMenuBar** updated from \`${TRACKED_MENUBAR}\` to \`${{ steps.upstream.outputs.menubar_version }}\`"
+          fi
+
+          echo "has_update=$HAS_UPDATE" >> $GITHUB_OUTPUT
+          echo "update_summary<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$UPDATE_SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Notification Issue
+        if: steps.compare.outputs.has_update == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = `${{ steps.compare.outputs.update_summary }}`;
+            const title = `Upstream CodexBar release detected`;
+            const body = `Automated upstream version monitor detected new releases:\n\n${summary}\n\nPlease check if TokenBar requires any schema adjustments, provider additions, or version string bumps.`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+            const exists = issues.data.some(i => i.title.includes('Upstream CodexBar release detected'));
+            if (!exists) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body
+              });
+            }
