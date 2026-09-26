@@ -3,6 +3,15 @@ import Foundation
 @testable import TokenBarCore
 
 final class ConfigurationMigratorTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        if let defaults = UserDefaults(suiteName: "com.lobo.CodexBarMenuBar") {
+            defaults.set(["claude", "codex", "antigravity"], forKey: "enabledProviderIDs")
+            defaults.set(300.0, forKey: "refreshInterval")
+            defaults.set(true, forKey: "resetTimeAsAbsolute")
+        }
+    }
+
     func testMigrationDetectionAndImport() {
         let (source, available) = ConfigurationMigrator.detectMigrationSource()
         XCTAssertTrue(available, "Expected to detect existing CodexBarMenuBar preferences on this Mac")

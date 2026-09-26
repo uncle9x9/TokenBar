@@ -25,7 +25,7 @@ jobs:
           xcodebuild -version
 
       - name: Run Swift Tests
-        run: swift test --parallel
+        run: swift test
 
       - name: Build Release App
         run: |

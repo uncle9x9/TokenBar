@@ -5,6 +5,14 @@ import SwiftUI
 
 @MainActor
 final class StatusItemControllerTests: XCTestCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        _ = NSApplication.shared
+        var count: UInt32 = 0
+        CGGetOnlineDisplayList(0, nil, &count)
+        try XCTSkipIf(count == 0, "Skipping StatusItemControllerTests on headless CI runner without WindowServer / display")
+    }
+
     func testConsolidatedPopoverInitializationAndLifecycle() {
         let store = UsageStore.shared
         store.seedSampleData()
