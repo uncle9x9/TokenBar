@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 public struct ProviderDetailCardView: View {
     public let config: ProviderConfig
     public let usage: ProviderUsage

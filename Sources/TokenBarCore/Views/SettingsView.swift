@@ -38,6 +38,7 @@ public enum SettingsTab: String, CaseIterable, Sendable {
 
 // MARK: - Reusable: SettingsSection
 
+@MainActor
 public struct SettingsSection<Content: View>: View {
     let title: LocalizedStringKey?
     let caption: LocalizedStringKey?
@@ -71,6 +72,7 @@ public struct SettingsSection<Content: View>: View {
 
 // MARK: - Reusable: PreferenceToggleRow
 
+@MainActor
 public struct PreferenceToggleRow: View {
     let title: LocalizedStringKey
     let subtitle: LocalizedStringKey?
@@ -101,6 +103,7 @@ public struct PreferenceToggleRow: View {
 
 // MARK: - Reusable: ProviderSettingsSection
 
+@MainActor
 public struct ProviderSettingsSection<Content: View>: View {
     let title: LocalizedStringKey
     let spacing: CGFloat
@@ -677,6 +680,7 @@ public struct ProviderSidebarRowView: View {
 
 // MARK: - Sidebar Reorder Handle
 
+@MainActor
 public struct ProviderSidebarReorderHandle: View {
     public var body: some View {
         VStack(spacing: 3) {
@@ -694,6 +698,7 @@ public struct ProviderSidebarReorderHandle: View {
 
 // MARK: - Status Dot
 
+@MainActor
 public struct ProviderStatusDot: View {
     let usage: ProviderUsage?
     let isEnabled: Bool
