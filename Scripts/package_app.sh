@@ -8,7 +8,8 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
 echo "==> Building TokenBar release binary..."
-env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+mkdir -p "$ROOT_DIR/.build/tmp" "$ROOT_DIR/.build/ModuleCache" "$ROOT_DIR/.build/cache"
+env DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}" \
     TMPDIR="$ROOT_DIR/.build/tmp" \
     CLANG_MODULE_CACHE_PATH="$ROOT_DIR/.build/ModuleCache" \
     swift build -c release --cache-path "$ROOT_DIR/.build/cache"
